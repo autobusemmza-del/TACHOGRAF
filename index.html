@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v4.1</title>
+<title>TACHOGRAF MZA PRO v4.2</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
@@ -29,13 +29,16 @@ button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border
   position:fixed;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.95);
   display:none;justify-content:center;align-items:center;
+  z-index:99999;
 }
 
 .box{
   background:#111;padding:20px;border:2px solid #00ff88;width:85%;
 }
 
-.box input{width:100%;padding:10px;margin:5px 0;}
+.box input{
+  width:100%;padding:10px;margin:5px 0;font-size:16px;
+}
 
 .print{
   display:none;background:white;color:black;
@@ -59,8 +62,10 @@ button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border
 
 <div class="display">
 <div class="time" id="time"></div>
-<div id="mode"></div>
+<div id="mode">TRYB: ---</div>
+
 <div class="status" id="breakStatus"></div>
+
 <div>PRACA (real): <span id="work"></span></div>
 <div>JAZDA (real): <span id="drive"></span></div>
 </div>
@@ -78,20 +83,56 @@ button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border
 
 </div>
 
+<!-- KARTA -->
+<div class="modal" id="cardModal">
+<div class="box">
+<h3>KARTA KIEROWCY</h3>
+<input id="driverName" placeholder="Imię i nazwisko">
+<input id="driverNr" placeholder="Nr karty">
+<input id="cardWork" placeholder="PRACA hh:mm">
+<input id="cardDrive" placeholder="JAZDA hh:mm">
+<button onclick="insertCard()">START</button>
+<button onclick="closeCard()">ANULUJ</button>
+</div>
+</div>
+
+<!-- EDYCJA -->
+<div class="modal" id="editModal">
+<div class="box">
+<input id="editDate">
+<input id="editTime">
+<input id="editText">
+<button onclick="saveLog()">ZAPISZ</button>
+<button onclick="deleteLog()">USUŃ</button>
+<button onclick="closeEdit()">ANULUJ</button>
+</div>
+</div>
+
+<!-- KONIEC -->
+<div class="modal" id="endModal">
+<div class="box">
+<input id="endHour" placeholder="Godzina hh:mm">
+<input id="endKm" placeholder="KM">
+<button onclick="saveEnd()">ZAPISZ</button>
+<button onclick="closeEnd()">ANULUJ</button>
+</div>
+</div>
+
 <div id="printArea" class="print"></div>
 
 <script>
 
-// ===== STATE =====
 let state = JSON.parse(localStorage.getItem("tacho")) || {
   logs:[],
   mode:"---",
-  driver:false,
+  driver:null,
   work:0,
   drive:0,
   breakTime:0,
   last:Date.now()
 };
+
+let editIndex=null;
 
 // ===== CZAS =====
 setInterval(()=>{
@@ -137,6 +178,7 @@ function addLog(t){
     time:d.toTimeString().slice(0,5),
     text:t
   });
+  save(); render();
 }
 
 // ===== TRYB =====
@@ -147,28 +189,60 @@ function setMode(m){
 }
 
 // ===== KARTA =====
-function openCard(){
-  let w=prompt("PRACA hh:mm");
-  let d=prompt("JAZDA hh:mm");
+function openCard(){cardModal.style.display="flex";}
+function closeCard(){cardModal.style.display="none";}
 
-  let [h1,m1]=w.split(":").map(Number);
-  let [h2,m2]=d.split(":").map(Number);
+function insertCard(){
+
+  let [h1,m1]=cardWork.value.split(":").map(Number);
+  let [h2,m2]=cardDrive.value.split(":").map(Number);
 
   state.work=((h1*60)+m1)*60000;
   state.drive=((h2*60)+m2)*60000;
 
-  state.driver=true;
-  addLog("KARTA WLOZONA");
+  state.driver={
+    name:driverName.value,
+    nr:driverNr.value
+  };
+
+  addLog("KARTA "+state.driver.name);
+  closeCard();
 }
 
-// ===== KONIEC =====
-function openEndModal(){
-  let h=prompt("Godzina");
-  let km=prompt("KM");
+// ===== EDYCJA =====
+function editLog(i){
+  editIndex=i;
+  let l=state.logs[i];
+  editDate.value=l.date;
+  editTime.value=l.time;
+  editText.value=l.text;
+  editModal.style.display="flex";
+}
 
-  addLog("KONIEC "+h+" KM:"+km);
+function saveLog(){
+  let l=state.logs[editIndex];
+  l.date=editDate.value;
+  l.time=editTime.value;
+  l.text=editText.value;
+  closeEdit(); save(); render();
+}
+
+function deleteLog(){
+  state.logs.splice(editIndex,1);
+  closeEdit(); save(); render();
+}
+
+function closeEdit(){editModal.style.display="none";}
+
+// ===== KONIEC =====
+function openEndModal(){endModal.style.display="flex";}
+function closeEnd(){endModal.style.display="none";}
+
+function saveEnd(){
+  addLog("KONIEC "+endHour.value+" KM:"+endKm.value);
   addLog("ODPOCZYNEK");
   state.mode="odpoczynek";
+  closeEnd();
 }
 
 // ===== WYDRUK =====
@@ -195,17 +269,25 @@ function printLogs(){
 
   let html=`<div class="ticket">
   <div class="center">*** SIEMENS VDO ***</div>
+  <div class="line"></div>
+
+  KIEROWCA:<br>
+  ${state.driver?.name||""}<br>
+  NR: ${state.driver?.nr||""}
+
   <div class="line"></div>`;
 
   sorted.forEach(l=>{
     html+=`${l.date} ${l.time}<br>${l.text}<div class="line"></div>`;
   });
 
-  html+=`--- PODSUMOWANIE ---<br>
+  html+=`
+  --- PODSUMOWANIE ---<br>
   JAZDA: ${f(drive)}<br>
   PRACA: ${f(work)}<br>
   PRZERWY: ${f(rest)}<br>
-  <div class="line"></div>*** END ***</div>`;
+  <div class="line"></div>
+  *** END ***</div>`;
 
   printArea.innerHTML=html;
   printArea.style.display="block";
@@ -240,7 +322,7 @@ function weeklyReport(){
     else if(t.includes("przerwa")) days[d].rest+=diff;
   }
 
-  let html=`<div class="ticket"><div class="center">*** RAPORT ***</div><div class="line"></div>`;
+  let html=`<div class="ticket"><div class="center">*** RAPORT TYGODNIOWY ***</div><div class="line"></div>`;
 
   Object.keys(days).forEach(d=>{
     html+=`${d}<br>
@@ -269,10 +351,11 @@ function render(){
   breakStatus.className="status "+(state.breakTime>=req?"green":"red");
 
   logs.innerHTML="";
-  state.logs.forEach(l=>{
+  state.logs.forEach((l,i)=>{
     let div=document.createElement("div");
     div.className="log-item";
     div.innerText=l.date+" "+l.time+" | "+l.text;
+    div.onclick=()=>editLog(i);
     logs.appendChild(div);
   });
 }
