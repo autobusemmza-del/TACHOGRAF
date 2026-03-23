@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v3.8</title>
+<title>TACHOGRAF MZA PRO v3.9</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
@@ -20,7 +20,22 @@ button{
 }
 
 .logs{margin-top:10px;max-height:200px;overflow:auto;background:#000;border:1px solid #333;}
-.log-item{padding:6px;border-bottom:1px solid #222;}
+.log-item{padding:6px;border-bottom:1px solid #222;cursor:pointer;}
+
+.modal{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.95);
+  display:none;justify-content:center;align-items:center;
+  z-index:99999;
+}
+
+.box{
+  background:#111;padding:20px;border:2px solid #00ff88;width:85%;
+}
+
+.box input{
+  width:100%;padding:10px;margin:5px 0;font-size:16px;
+}
 
 .print{
   display:none;background:white;color:black;
@@ -51,7 +66,7 @@ button{
 <button onclick="setMode('jazda')">JAZDA</button>
 <button onclick="setMode('praca')">INNA PRACA</button>
 <button onclick="setMode('przerwa')">PRZERWA</button>
-<button onclick="endDay()">KONIEC PRACY</button>
+<button onclick="openEndModal()">KONIEC PRACY</button>
 <button onclick="printLogs()">WYDRUK</button>
 <button onclick="weeklyReport()">RAPORT TYGODNIOWY</button>
 <button onclick="resetAll()">RESET</button>
@@ -60,20 +75,47 @@ button{
 
 </div>
 
+<!-- EDYCJA LOG -->
+<div class="modal" id="editModal">
+<div class="box">
+<input id="editDate" placeholder="YYYY-MM-DD">
+<input id="editTime" placeholder="HH:mm">
+<input id="editText">
+<button onclick="saveLog()">ZAPISZ</button>
+<button onclick="deleteLog()">USUŃ</button>
+<button onclick="closeEdit()">ANULUJ</button>
+</div>
+</div>
+
+<!-- KONIEC -->
+<div class="modal" id="endModal">
+<div class="box">
+<input id="endHour" placeholder="Godzina hh:mm">
+<input id="endKm" placeholder="KM">
+<button onclick="saveEnd()">ZAPISZ</button>
+<button onclick="closeEnd()">ANULUJ</button>
+</div>
+</div>
+
 <div id="printArea" class="print"></div>
 
 <script>
 
+// ===== STATE =====
 let state = JSON.parse(localStorage.getItem("tacho")) || {
   logs:[],
   mode:"---",
   driver:null
 };
 
+let editIndex=null;
+
+// ===== TIME =====
 setInterval(()=>{
   time.innerText=new Date().toLocaleString("pl-PL");
 },1000);
 
+// ===== LOG =====
 function addLog(t){
   let d=new Date();
   state.logs.unshift({
@@ -84,12 +126,14 @@ function addLog(t){
   save(); render();
 }
 
+// ===== TRYB =====
 function setMode(m){
   if(!state.driver){alert("Włóż kartę!");return;}
   state.mode=m;
   addLog("TRYB: "+m);
 }
 
+// ===== KARTA =====
 function openCard(){
   let name=prompt("Imię");
   let surname=prompt("Nazwisko");
@@ -99,14 +143,45 @@ function openCard(){
   addLog("KARTA WLOZONA");
 }
 
-function endDay(){
-  let h=prompt("Godzina");
-  let km=prompt("KM");
+// ===== KONIEC =====
+function openEndModal(){endModal.style.display="flex";}
+function closeEnd(){endModal.style.display="none";}
 
-  addLog("KONIEC "+h+" KM:"+km);
+function saveEnd(){
+  addLog("KONIEC "+endHour.value+" KM:"+endKm.value);
   addLog("ODPOCZYNEK");
   state.mode="odpoczynek";
+  closeEnd();
 }
+
+// ===== EDYCJA LOG =====
+function editLog(i){
+  editIndex=i;
+  let l=state.logs[i];
+  editDate.value=l.date;
+  editTime.value=l.time;
+  editText.value=l.text;
+  editModal.style.display="flex";
+}
+
+function saveLog(){
+  let l=state.logs[editIndex];
+  l.date=editDate.value;
+  l.time=editTime.value;
+  l.text=editText.value;
+  closeEdit();
+  save();
+  render();
+}
+
+function deleteLog(){
+  state.logs.splice(editIndex,1);
+  closeEdit();
+  save();
+  render();
+}
+
+function closeEdit(){editModal.style.display="none";}
 
 // ===== FORMAT =====
 function f(ms){
@@ -127,7 +202,6 @@ function printLogs(){
 
   let sorted=[...state.logs].sort((a,b)=>toDate(a)-toDate(b));
 
-  // 🔥 karta zawsze pierwsza przy tej samej godzinie
   sorted.sort((a,b)=>{
     if(a.date===b.date && a.time===b.time){
       if(a.text.includes("KARTA")) return -1;
@@ -158,7 +232,7 @@ function printLogs(){
 
     if(txt.includes("jazda")){
       drive+=diff;
-      work+=diff; // 🔥 jazda = praca
+      work+=diff;
     }
     else if(txt.includes("praca")){
       work+=diff;
@@ -197,21 +271,24 @@ function printLogs(){
 
 // ===== RAPORT =====
 function weeklyReport(){
-  alert("Raport działa — kolejny krok to ITD 🔥");
+  alert("Raport działa — następny krok ITD 🔥");
 }
 
+// ===== RENDER =====
 function render(){
   mode.innerText="TRYB: "+state.mode;
 
   logs.innerHTML="";
-  state.logs.forEach(l=>{
+  state.logs.forEach((l,i)=>{
     let div=document.createElement("div");
     div.className="log-item";
     div.innerText=l.date+" "+l.time+" | "+l.text;
+    div.onclick=()=>editLog(i); // 🔥 klik = edycja
     logs.appendChild(div);
   });
 }
 
+// ===== SYSTEM =====
 function save(){localStorage.setItem("tacho",JSON.stringify(state));}
 function resetAll(){localStorage.removeItem("tacho");location.reload();}
 
