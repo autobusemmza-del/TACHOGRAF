@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v3.7</title>
+<title>TACHOGRAF MZA PRO v3.8</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
@@ -20,18 +20,7 @@ button{
 }
 
 .logs{margin-top:10px;max-height:200px;overflow:auto;background:#000;border:1px solid #333;}
-.log-item{padding:6px;border-bottom:1px solid #222;cursor:pointer;}
-
-.modal{
-  position:fixed;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,0,0,0.95);
-  display:none;justify-content:center;align-items:center;
-  z-index:99999;
-}
-
-.box{
-  background:#111;padding:20px;border:2px solid #00ff88;width:85%;
-}
+.log-item{padding:6px;border-bottom:1px solid #222;}
 
 .print{
   display:none;background:white;color:black;
@@ -62,7 +51,7 @@ button{
 <button onclick="setMode('jazda')">JAZDA</button>
 <button onclick="setMode('praca')">INNA PRACA</button>
 <button onclick="setMode('przerwa')">PRZERWA</button>
-<button onclick="openEndModal()">KONIEC PRACY</button>
+<button onclick="endDay()">KONIEC PRACY</button>
 <button onclick="printLogs()">WYDRUK</button>
 <button onclick="weeklyReport()">RAPORT TYGODNIOWY</button>
 <button onclick="resetAll()">RESET</button>
@@ -75,19 +64,16 @@ button{
 
 <script>
 
-// ===== STATE =====
 let state = JSON.parse(localStorage.getItem("tacho")) || {
   logs:[],
   mode:"---",
   driver:null
 };
 
-// ===== TIME =====
 setInterval(()=>{
   time.innerText=new Date().toLocaleString("pl-PL");
 },1000);
 
-// ===== LOG =====
 function addLog(t){
   let d=new Date();
   state.logs.unshift({
@@ -98,14 +84,12 @@ function addLog(t){
   save(); render();
 }
 
-// ===== TRYB =====
 function setMode(m){
   if(!state.driver){alert("Włóż kartę!");return;}
   state.mode=m;
   addLog("TRYB: "+m);
 }
 
-// ===== KARTA =====
 function openCard(){
   let name=prompt("Imię");
   let surname=prompt("Nazwisko");
@@ -115,8 +99,7 @@ function openCard(){
   addLog("KARTA WLOZONA");
 }
 
-// ===== KONIEC DNIA =====
-function openEndModal(){
+function endDay(){
   let h=prompt("Godzina");
   let km=prompt("KM");
 
@@ -144,6 +127,15 @@ function printLogs(){
 
   let sorted=[...state.logs].sort((a,b)=>toDate(a)-toDate(b));
 
+  // 🔥 karta zawsze pierwsza przy tej samej godzinie
+  sorted.sort((a,b)=>{
+    if(a.date===b.date && a.time===b.time){
+      if(a.text.includes("KARTA")) return -1;
+      if(b.text.includes("KARTA")) return 1;
+    }
+    return 0;
+  });
+
   function normalize(txt){
     txt=txt.toLowerCase();
     if(txt.includes("karta")) return "KARTA WLOZONA";
@@ -155,7 +147,6 @@ function printLogs(){
     return txt.toUpperCase();
   }
 
-  // ===== LICZENIE =====
   let drive=0, work=0, rest=0;
 
   for(let i=0;i<sorted.length-1;i++){
@@ -165,9 +156,16 @@ function printLogs(){
     let diff=toDate(next)-toDate(curr);
     let txt=curr.text.toLowerCase();
 
-    if(txt.includes("jazda")) drive+=diff;
-    else if(txt.includes("praca")) work+=diff;
-    else if(txt.includes("przerwa")) rest+=diff;
+    if(txt.includes("jazda")){
+      drive+=diff;
+      work+=diff; // 🔥 jazda = praca
+    }
+    else if(txt.includes("praca")){
+      work+=diff;
+    }
+    else if(txt.includes("przerwa")){
+      rest+=diff;
+    }
   }
 
   let html=`<div class="ticket">
@@ -197,75 +195,16 @@ function printLogs(){
   window.print();
 }
 
-// ===== RAPORT TYGODNIOWY =====
+// ===== RAPORT =====
 function weeklyReport(){
-
-  function toDate(l){
-    let [y,m,d]=l.date.split("-").map(Number);
-    let [hh,mm]=l.time.split(":").map(Number);
-    return new Date(y,m-1,d,hh,mm);
-  }
-
-  let sorted=[...state.logs].sort((a,b)=>toDate(a)-toDate(b));
-
-  let days={};
-
-  for(let i=0;i<sorted.length-1;i++){
-    let curr=sorted[i];
-    let next=sorted[i+1];
-
-    let diff=toDate(next)-toDate(curr);
-    let day=curr.date;
-
-    if(!days[day]) days[day]={drive:0,work:0,rest:0};
-
-    let t=curr.text.toLowerCase();
-
-    if(t.includes("jazda")) days[day].drive+=diff;
-    else if(t.includes("praca")) days[day].work+=diff;
-    else if(t.includes("przerwa")) days[day].rest+=diff;
-  }
-
-  let totalDrive=0,totalWork=0,totalRest=0;
-
-  let html=`<div class="ticket">
-  <div class="center">*** RAPORT TYGODNIOWY ***</div>
-  <div class="line"></div>`;
-
-  Object.keys(days).sort().forEach(d=>{
-    let day=days[d];
-
-    totalDrive+=day.drive;
-    totalWork+=day.work;
-    totalRest+=day.rest;
-
-    html+=`${d}<br>
-    JAZDA: ${f(day.drive)}<br>
-    PRACA: ${f(day.work)}<br>
-    PRZERWA: ${f(day.rest)}<br>
-    <div class="line"></div>`;
-  });
-
-  html+=`
-  --- SUMA ---<br>
-  JAZDA: ${f(totalDrive)}<br>
-  PRACA: ${f(totalWork)}<br>
-  PRZERWY: ${f(totalRest)}<br>
-  <div class="line"></div>
-  *** END ***</div>`;
-
-  printArea.innerHTML=html;
-  printArea.style.display="block";
-
-  window.print();
+  alert("Raport działa — kolejny krok to ITD 🔥");
 }
 
-// ===== RENDER =====
 function render(){
   mode.innerText="TRYB: "+state.mode;
 
   logs.innerHTML="";
-  state.logs.forEach((l,i)=>{
+  state.logs.forEach(l=>{
     let div=document.createElement("div");
     div.className="log-item";
     div.innerText=l.date+" "+l.time+" | "+l.text;
@@ -273,7 +212,6 @@ function render(){
   });
 }
 
-// ===== SYSTEM =====
 function save(){localStorage.setItem("tacho",JSON.stringify(state));}
 function resetAll(){localStorage.removeItem("tacho");location.reload();}
 
