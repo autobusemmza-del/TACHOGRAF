@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v3</title>
+<title>TACHOGRAF MZA PRO v3.1</title>
 
 <style>
 body{
@@ -71,7 +71,8 @@ button{
   display:none;
   justify-content:center;
   align-items:center;
-  z-index:9999;
+  z-index:99999;
+  pointer-events:auto;
 }
 
 .box{
@@ -86,11 +87,6 @@ button{
   padding:10px;
   margin:5px 0;
   font-size:16px;
-}
-
-.box button{
-  width:100%;
-  margin-top:5px;
 }
 
 /* WYDRUK */
@@ -148,20 +144,16 @@ button{
 <div class="modal" id="cardModal">
 <div class="box">
 <h3>KARTA KIEROWCY</h3>
+
+<input id="cardName" placeholder="Imię">
+<input id="cardSurname" placeholder="Nazwisko">
+<input id="cardNumber" placeholder="Nr karty">
+
 <input id="cardWork" placeholder="PRACA hh:mm">
 <input id="cardDrive" placeholder="JAZDA hh:mm">
+
 <button onclick="insertCard()">START</button>
 <button onclick="closeCard()">ANULUJ</button>
-</div>
-</div>
-
-<!-- MODAL EDYCJI -->
-<div class="modal" id="editModal">
-<div class="box">
-<input id="editText">
-<button onclick="saveLog()">ZAPISZ</button>
-<button onclick="deleteLog()">USUŃ</button>
-<button onclick="closeEdit()">ANULUJ</button>
 </div>
 </div>
 
@@ -174,10 +166,9 @@ let state = JSON.parse(localStorage.getItem("tacho")) || {
   breakTime:0,
   mode:"---",
   last:Date.now(),
-  logs:[]
+  logs:[],
+  driver:null
 };
-
-let editIndex=null;
 
 /* CZAS */
 setInterval(()=>{
@@ -232,17 +223,20 @@ function render(){
 
   let logsEl=document.getElementById("logs");
   logsEl.innerHTML="";
-  state.logs.forEach((l,i)=>{
+  state.logs.forEach(l=>{
     let div=document.createElement("div");
     div.className="log-item";
     div.innerText=l.time+" | "+l.text;
-    div.onclick=()=>editLog(i);
     logsEl.appendChild(div);
   });
 }
 
 /* TRYB */
 function setMode(m){
+  if(!state.driver){
+    alert("Najpierw włóż kartę!");
+    return;
+  }
   state.mode=m;
   addLog("TRYB: "+m);
 }
@@ -257,47 +251,40 @@ function closeCard(){
 }
 
 function insertCard(){
+  let name=document.getElementById("cardName").value;
+  let surname=document.getElementById("cardSurname").value;
+  let number=document.getElementById("cardNumber").value;
+
   let w=document.getElementById("cardWork").value;
   let d=document.getElementById("cardDrive").value;
 
   let [h1,m1]=w.split(":").map(Number);
   let [h2,m2]=d.split(":").map(Number);
 
-  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)){
-    alert("Błędny format");
+  if(!name || !surname || !number){
+    alert("Uzupełnij dane kierowcy");
     return;
   }
 
+  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)){
+    alert("Błędny format czasu");
+    return;
+  }
+
+  state.driver={name,surname,number};
   state.work=((h1*60)+m1)*60000;
   state.drive=((h2*60)+m2)*60000;
 
-  addLog("KARTA WŁOŻONA");
+  addLog("KARTA WŁOŻONA: "+name+" "+surname);
+
   closeCard();
+  save();
+  render();
 }
 
 /* LOGI */
 function addLog(t){
   state.logs.unshift({time:new Date().toLocaleString(), text:t});
-}
-
-function editLog(i){
-  editIndex=i;
-  document.getElementById("editText").value=state.logs[i].text;
-  document.getElementById("editModal").style.display="flex";
-}
-
-function saveLog(){
-  state.logs[editIndex].text=document.getElementById("editText").value;
-  closeEdit(); save();
-}
-
-function deleteLog(){
-  state.logs.splice(editIndex,1);
-  closeEdit(); save();
-}
-
-function closeEdit(){
-  document.getElementById("editModal").style.display="none";
 }
 
 /* KONIEC */
@@ -307,20 +294,25 @@ function endDay(){
   addLog("KONIEC "+h+" KM:"+km);
 }
 
-/* WYDRUK REAL */
+/* WYDRUK */
 function printLogs(){
   let html=`
   <div class="ticket">
   <div class="center">*** SIEMENS VDO ***</div>
-  <div class="center">TACHOGRAF CYFROWY</div>
   <div class="line"></div>
-  DATA: ${new Date().toLocaleDateString()}<br>
-  GODZ: ${new Date().toLocaleTimeString()}<br>
+
+  KIEROWCA:<br>
+  ${state.driver?.name || "---"} ${state.driver?.surname || ""}<br>
+  NR: ${state.driver?.number || "---"}<br>
+
   <div class="line"></div>
+
   PRACA: ${f(state.work)}<br>
   JAZDA: ${f(state.drive)}<br>
   PRZERWY: ${f(state.breakTime)}<br>
+
   <div class="line"></div>
+
   ZDARZENIA:<br>
   `;
 
@@ -328,8 +320,7 @@ function printLogs(){
     html+=`${l.time}<br>${l.text}<br>`;
   });
 
-  html+=`<div class="line"></div>
-  *** KONIEC WYDRUKU ***</div>`;
+  html+=`<div class="line"></div>*** END ***</div>`;
 
   let p=document.getElementById("printArea");
   p.innerHTML=html;
@@ -340,10 +331,8 @@ function printLogs(){
 
 /* RESET */
 function resetAll(){
-  if(confirm("RESET?")){
-    localStorage.removeItem("tacho");
-    location.reload();
-  }
+  localStorage.removeItem("tacho");
+  location.reload();
 }
 
 /* SAVE */
