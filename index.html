@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tachograf FINAL ITD</title>
+
 <style>
 body{margin:0;background:#111;font-family:monospace;display:flex;justify-content:center;align-items:center;height:100vh}
 .tacho{width:420px;background:#000;border-radius:25px;box-shadow:0 0 40px #0f0;padding:15px;color:#0f0}
@@ -14,9 +15,12 @@ body{margin:0;background:#111;font-family:monospace;display:flex;justify-content
 .green{color:lime}
 .red{color:red}
 .orange{color:orange}
+.log-item{cursor:pointer}
 </style>
+
 </head>
 <body>
+
 <div class="tacho">
 <div class="screen">
 <div id="time"></div>
@@ -44,87 +48,260 @@ body{margin:0;background:#111;font-family:monospace;display:flex;justify-content
 </div>
 
 <script>
-let mode="";
-let work=0,drive=0;
-let breakTime=0;
-let requiredBreaks=0,doneBreaks=0;
-let logs=[];
-let timer=null;
-let card=false;
-let restStart=null;
 
-function updateClock(){document.getElementById("time").innerText=new Date().toLocaleString();}
-setInterval(updateClock,1000);
+// 🔥 PRZYWRACANIE
+let work = parseInt(localStorage.getItem("tacho_work")) || 0;
+let drive = parseInt(localStorage.getItem("tacho_drive")) || 0;
+let mode = localStorage.getItem("tacho_mode") || "";
+let requiredBreaks = parseInt(localStorage.getItem("tacho_req")) || 0;
+let doneBreaks = parseInt(localStorage.getItem("tacho_done")) || 0;
+let breakTime = 0;
+let logs = JSON.parse(localStorage.getItem("tacho_logs") || "[]");
 
-function format(ms){let s=Math.floor(ms/1000);let h=Math.floor(s/3600);let m=Math.floor((s%3600)/60);return("0"+h).slice(-2)+":"+("0"+m).slice(-2);}
+let timer = null;
+let card = localStorage.getItem("tacho_card") === "true";
+let restStart = localStorage.getItem("tacho_rest") ? parseInt(localStorage.getItem("tacho_rest")) : null;
 
-function insertCard(){card=true;document.getElementById("card").innerText="KARTA OK";document.getElementById("card").className="green";log("KARTA WLOZONA");updateSystem();}
+// START
+updateDisplay();
+updateBreakStatus();
+updateSystem();
+renderLogs();
 
-function startDay(){if(!card){log("NARUSZENIE BRAK KARTY");updateSystem();return}
-let w=prompt("Czas pracy hh:mm");let d=prompt("Czas jazdy hh:mm");
-let workH=parseInt(w.split(":")[0]);let driveH=parseInt(d.split(":")[0]);
-requiredBreaks=0;doneBreaks=0;
-if(workH>6) requiredBreaks=1;
-if(driveH>=6&&driveH<=8) requiredBreaks=2;
-if(driveH>8) requiredBreaks=3;
-updateBreakStatus();log("START DNIA | przerwy:"+requiredBreaks);
+if(card){
+document.getElementById("card").innerText="KARTA OK";
+document.getElementById("card").className="green";
 }
 
-function updateBreakStatus(){let el=document.getElementById("breakStatus");
-if(requiredBreaks===0){el.innerHTML="PRZERWY: BRAK";return}
-if(doneBreaks===requiredBreaks){el.innerHTML="<span class='green'>PRZERWY OK "+doneBreaks+"/"+requiredBreaks+"</span>"}
-else if(doneBreaks>0){el.innerHTML="<span class='orange'>PRZERWY "+doneBreaks+"/"+requiredBreaks+"</span>"}
-else{el.innerHTML="<span class='red'>PRZERWY 0/"+requiredBreaks+"</span>"}
+if(mode){
+setMode(mode);
+}
+
+// CLOCK
+function updateClock(){
+document.getElementById("time").innerText=new Date().toLocaleString();
+}
+setInterval(updateClock,1000);
+
+// FORMAT
+function format(ms){
+let s=Math.floor(ms/1000);
+let h=Math.floor(s/3600);
+let m=Math.floor((s%3600)/60);
+return("0"+h).slice(-2)+":"+("0"+m).slice(-2);
+}
+
+// KARTA
+function insertCard(){
+card=true;
+localStorage.setItem("tacho_card", true);
+document.getElementById("card").innerText="KARTA OK";
+document.getElementById("card").className="green";
+log("KARTA WLOZONA");
 updateSystem();
 }
 
-function setMode(m){if(!card){log("NARUSZENIE BRAK KARTY");updateSystem();return}
-mode=m;log("TRYB "+m);
+// START DNIA
+function startDay(){
+if(!card){log("NARUSZENIE BRAK KARTY");updateSystem();return}
+
+let w=prompt("Czas pracy hh:mm");
+let d=prompt("Czas jazdy hh:mm");
+
+let workH=parseInt(w.split(":")[0]);
+let driveH=parseInt(d.split(":")[0]);
+
+requiredBreaks=0;
+doneBreaks=0;
+
+if(workH>6) requiredBreaks=1;
+if(driveH>=6&&driveH<=8) requiredBreaks=2;
+if(driveH>8) requiredBreaks=3;
+
+saveState();
+updateBreakStatus();
+log("START DNIA | przerwy:"+requiredBreaks);
+}
+
+// TRYB
+function setMode(m){
+if(!card){log("NARUSZENIE BRAK KARTY");updateSystem();return}
+
+mode=m;
+localStorage.setItem("tacho_mode", mode);
+
+log("TRYB "+m);
+
 if(timer) clearInterval(timer);
 
 timer=setInterval(()=>{
+
 if(mode==="JAZDA"){work+=1000;drive+=1000}
 if(mode==="PRACA"){work+=1000}
-if(mode==="PRZERWA"){work+=1000; breakTime+=1000; if(breakTime>=15*60000){breakTime=0;doneBreaks++;log("PRZERWA "+doneBreaks+"/"+requiredBreaks);updateBreakStatus();}}
+if(mode==="PRZERWA"){
+work+=1000;
+breakTime+=1000;
+if(breakTime>=15*60000){
+breakTime=0;
+doneBreaks++;
+updateBreakStatus();
+log("PRZERWA "+doneBreaks+"/"+requiredBreaks);
+}
+}
+
 updateDisplay();
+saveState();
+
 },1000);
 }
 
-function updateDisplay(){document.getElementById("work").innerText=format(work);document.getElementById("drive").innerText=format(drive);}
-
-function endDay(){log("KONIEC DNIA");restStart=Date.now();saveDay();updateSystem();}
-
-function saveDay(){let week=JSON.parse(localStorage.getItem("week7")||"[]");
-week.push({date:new Date().toLocaleDateString(),work,drive,requiredBreaks,doneBreaks});
-while(week.length>7)week.shift();
-localStorage.setItem("week7",JSON.stringify(week));}
-
-function showWeek(){let week=JSON.parse(localStorage.getItem("week7")||"[]");let txt="";
-week.forEach(d=>{txt+=d.date+" | PRACA:"+format(d.work)+" JAZDA:"+format(d.drive)+" PRZERWY:"+d.doneBreaks+"/"+d.requiredBreaks+"\n"});
-alert(txt);}
-
-function printWeek(){let week=JSON.parse(localStorage.getItem("week7")||"[]");let txt="";
-week.forEach(d=>{txt+=d.date+"\n"+"PRACA:"+format(d.work)+" JAZDA:"+format(d.drive)+" PRZERWY:"+d.doneBreaks+"/"+d.requiredBreaks+"\n\n"});
-let w=window.open();w.document.write("<pre>"+txt+"</pre>");w.print();}
-
-function checkRest(){if(!restStart)return;let rest=Date.now()-restStart;
-let el=document.getElementById("restStatus");
-if(rest>=11*3600000){el.innerHTML="<span class='green'>ODPOCZYNEK OK</span>"}
-else{el.innerHTML="<span class='red'>ODPOCZYNEK <11h</span>"}
-updateSystem();}
-setInterval(checkRest,5000);
-
-function updateSystem(){let ok=true;
-if(!card) ok=false;
-if(requiredBreaks>0 && doneBreaks<requiredBreaks) ok=false;
-let el=document.getElementById("systemStatus");
-if(ok){el.innerHTML="<span class='green'>SYSTEM OK</span>"}
-else{el.innerHTML="<span class='red'>SYSTEM NARUSZENIE</span>"}
+// WYŚWIETLANIE
+function updateDisplay(){
+document.getElementById("work").innerText=format(work);
+document.getElementById("drive").innerText=format(drive);
 }
 
-function log(txt){let t=new Date().toLocaleTimeString();logs.push(t+" - "+txt);document.getElementById("logs").innerHTML=logs.join("<br>");}
+// PRZERWY
+function updateBreakStatus(){
+let el=document.getElementById("breakStatus");
 
-function resetAll(){localStorage.clear();location.reload()}
+if(requiredBreaks===0){
+el.innerHTML="PRZERWY: BRAK";
+}else if(doneBreaks===requiredBreaks){
+el.innerHTML="<span class='green'>PRZERWY OK "+doneBreaks+"/"+requiredBreaks+"</span>";
+}else if(doneBreaks>0){
+el.innerHTML="<span class='orange'>PRZERWY "+doneBreaks+"/"+requiredBreaks+"</span>";
+}else{
+el.innerHTML="<span class='red'>PRZERWY 0/"+requiredBreaks+"</span>";
+}
+
+updateSystem();
+}
+
+// KONIEC DNIA
+function endDay(){
+log("KONIEC DNIA");
+restStart=Date.now();
+localStorage.setItem("tacho_rest", restStart);
+saveDay();
+updateSystem();
+}
+
+// ZAPIS DNIA
+function saveDay(){
+let week=JSON.parse(localStorage.getItem("week7")||"[]");
+
+week.push({
+date:new Date().toLocaleDateString(),
+work,drive,requiredBreaks,doneBreaks
+});
+
+while(week.length>7)week.shift();
+
+localStorage.setItem("week7",JSON.stringify(week));
+}
+
+// LOGI
+function log(txt){
+let t=new Date().toLocaleTimeString();
+logs.push(t+" - "+txt);
+localStorage.setItem("tacho_logs", JSON.stringify(logs));
+renderLogs();
+}
+
+// 🔥 EDYCJA LOGÓW
+function renderLogs(){
+let html="";
+logs.forEach((l,i)=>{
+html+=`<div class="log-item" onclick="editLog(${i})">${l}</div>`;
+});
+document.getElementById("logs").innerHTML=html;
+}
+
+function editLog(index){
+let current = logs[index];
+let edited = prompt("Edytuj log:", current);
+
+if(edited !== null && edited !== ""){
+logs[index] = edited;
+localStorage.setItem("tacho_logs", JSON.stringify(logs));
+renderLogs();
+}
+}
+
+// SYSTEM
+function updateSystem(){
+let ok=true;
+
+if(!card) ok=false;
+if(requiredBreaks>0 && doneBreaks<requiredBreaks) ok=false;
+
+let el=document.getElementById("systemStatus");
+
+if(ok){
+el.innerHTML="<span class='green'>SYSTEM OK</span>";
+}else{
+el.innerHTML="<span class='red'>SYSTEM NARUSZENIE</span>";
+}
+}
+
+// ODPOCZYNEK
+function checkRest(){
+if(!restStart)return;
+
+let rest=Date.now()-restStart;
+let el=document.getElementById("restStatus");
+
+if(rest>=11*3600000){
+el.innerHTML="<span class='green'>ODPOCZYNEK OK</span>";
+}else{
+el.innerHTML="<span class='red'>ODPOCZYNEK <11h</span>";
+}
+
+updateSystem();
+}
+setInterval(checkRest,5000);
+
+// PODGLĄD
+function showWeek(){
+let week=JSON.parse(localStorage.getItem("week7")||"[]");
+let txt="";
+
+week.forEach(d=>{
+txt+=d.date+" | PRACA:"+format(d.work)+" JAZDA:"+format(d.drive)+" PRZERWY:"+d.doneBreaks+"/"+d.requiredBreaks+"\n"
+});
+
+alert(txt);
+}
+
+// DRUK
+function printWeek(){
+let week=JSON.parse(localStorage.getItem("week7")||"[]");
+let txt="";
+
+week.forEach(d=>{
+txt+=d.date+"\nPRACA:"+format(d.work)+" JAZDA:"+format(d.drive)+" PRZERWY:"+d.doneBreaks+"/"+d.requiredBreaks+"\n\n"
+});
+
+let w=window.open();
+w.document.write("<pre>"+txt+"</pre>");
+w.print();
+}
+
+// ZAPIS
+function saveState(){
+localStorage.setItem("tacho_work", work);
+localStorage.setItem("tacho_drive", drive);
+localStorage.setItem("tacho_req", requiredBreaks);
+localStorage.setItem("tacho_done", doneBreaks);
+}
+
+// RESET
+function resetAll(){
+localStorage.clear();
+location.reload();
+}
+
 </script>
 </body>
 </html>
