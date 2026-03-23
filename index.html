@@ -3,35 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v4</title>
+<title>TACHOGRAF MZA PRO v4.1</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
 .container{padding:10px;}
 
 .display{
-  background:#000;
-  border-radius:15px;
-  padding:15px;
+  background:#000;border-radius:15px;padding:15px;
   box-shadow:0 0 25px #00ff88;
 }
 
 .time{text-align:center;font-size:18px;}
 
-.status{
-  margin-top:10px;
-  padding:5px;
-  border:1px solid #333;
-  text-align:center;
-}
-
+.status{margin-top:10px;padding:5px;border:1px solid #333;text-align:center;}
 .red{color:red;}
 .green{color:#00ff88;}
 
-button{
-  width:100%;margin:5px 0;padding:12px;
-  background:#111;color:#00ff88;border:none;
-}
+button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border:none;}
 
 .logs{margin-top:10px;max-height:200px;overflow:auto;background:#000;border:1px solid #333;}
 .log-item{padding:6px;border-bottom:1px solid #222;cursor:pointer;}
@@ -40,16 +29,13 @@ button{
   position:fixed;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.95);
   display:none;justify-content:center;align-items:center;
-  z-index:99999;
 }
 
 .box{
   background:#111;padding:20px;border:2px solid #00ff88;width:85%;
 }
 
-.box input{
-  width:100%;padding:10px;margin:5px 0;font-size:16px;
-}
+.box input{width:100%;padding:10px;margin:5px 0;}
 
 .print{
   display:none;background:white;color:black;
@@ -73,10 +59,8 @@ button{
 
 <div class="display">
 <div class="time" id="time"></div>
-<div id="mode">TRYB: ---</div>
-
+<div id="mode"></div>
 <div class="status" id="breakStatus"></div>
-
 <div>PRACA (real): <span id="work"></span></div>
 <div>JAZDA (real): <span id="drive"></span></div>
 </div>
@@ -94,43 +78,11 @@ button{
 
 </div>
 
-<!-- KARTA -->
-<div class="modal" id="cardModal">
-<div class="box">
-<h3>DEKLARACJA</h3>
-<input id="cardWork" placeholder="PRACA hh:mm">
-<input id="cardDrive" placeholder="JAZDA hh:mm">
-<button onclick="insertCard()">START</button>
-<button onclick="closeCard()">ANULUJ</button>
-</div>
-</div>
-
-<!-- EDYCJA -->
-<div class="modal" id="editModal">
-<div class="box">
-<input id="editDate">
-<input id="editTime">
-<input id="editText">
-<button onclick="saveLog()">ZAPISZ</button>
-<button onclick="deleteLog()">USUŃ</button>
-<button onclick="closeEdit()">ANULUJ</button>
-</div>
-</div>
-
-<!-- KONIEC -->
-<div class="modal" id="endModal">
-<div class="box">
-<input id="endHour" placeholder="Godzina">
-<input id="endKm" placeholder="KM">
-<button onclick="saveEnd()">ZAPISZ</button>
-<button onclick="closeEnd()">ANULUJ</button>
-</div>
-</div>
-
 <div id="printArea" class="print"></div>
 
 <script>
 
+// ===== STATE =====
 let state = JSON.parse(localStorage.getItem("tacho")) || {
   logs:[],
   mode:"---",
@@ -140,8 +92,6 @@ let state = JSON.parse(localStorage.getItem("tacho")) || {
   breakTime:0,
   last:Date.now()
 };
-
-let editIndex=null;
 
 // ===== CZAS =====
 setInterval(()=>{
@@ -162,15 +112,9 @@ setInterval(()=>{
   let now=Date.now();
   let diff=now-state.last;
 
-  if(state.mode!=="odpoczynek"){
-    state.work+=diff;
-  }
-  if(state.mode==="jazda"){
-    state.drive+=diff;
-  }
-  if(state.mode==="przerwa"){
-    state.breakTime+=diff;
-  }
+  if(state.mode!=="odpoczynek") state.work+=diff;
+  if(state.mode==="jazda") state.drive+=diff;
+  if(state.mode==="przerwa") state.breakTime+=diff;
 
   state.last=now;
   save(); render();
@@ -183,27 +127,6 @@ function requiredBreak(){
   if(d>=6) return 30*60000;
   if(state.work>6*3600000) return 15*60000;
   return 0;
-}
-
-// ===== RENDER =====
-function render(){
-
-  work.innerText=f(state.work);
-  drive.innerText=f(state.drive);
-  mode.innerText="TRYB: "+state.mode;
-
-  let req=requiredBreak();
-  breakStatus.innerText=`PRZERWY: ${f(state.breakTime)} / ${f(req)}`;
-  breakStatus.className="status "+(state.breakTime>=req?"green":"red");
-
-  logs.innerHTML="";
-  state.logs.forEach((l,i)=>{
-    let div=document.createElement("div");
-    div.className="log-item";
-    div.innerText=l.date+" "+l.time+" | "+l.text;
-    div.onclick=()=>editLog(i);
-    logs.appendChild(div);
-  });
 }
 
 // ===== LOG =====
@@ -224,62 +147,135 @@ function setMode(m){
 }
 
 // ===== KARTA =====
-function openCard(){cardModal.style.display="flex";}
-function closeCard(){cardModal.style.display="none";}
+function openCard(){
+  let w=prompt("PRACA hh:mm");
+  let d=prompt("JAZDA hh:mm");
 
-function insertCard(){
-  let [h1,m1]=cardWork.value.split(":").map(Number);
-  let [h2,m2]=cardDrive.value.split(":").map(Number);
+  let [h1,m1]=w.split(":").map(Number);
+  let [h2,m2]=d.split(":").map(Number);
 
   state.work=((h1*60)+m1)*60000;
   state.drive=((h2*60)+m2)*60000;
 
   state.driver=true;
   addLog("KARTA WLOZONA");
-  closeCard();
 }
-
-// ===== EDYCJA =====
-function editLog(i){
-  editIndex=i;
-  let l=state.logs[i];
-  editDate.value=l.date;
-  editTime.value=l.time;
-  editText.value=l.text;
-  editModal.style.display="flex";
-}
-
-function saveLog(){
-  let l=state.logs[editIndex];
-  l.date=editDate.value;
-  l.time=editTime.value;
-  l.text=editText.value;
-  closeEdit(); save(); render();
-}
-
-function deleteLog(){
-  state.logs.splice(editIndex,1);
-  closeEdit(); save(); render();
-}
-
-function closeEdit(){editModal.style.display="none";}
 
 // ===== KONIEC =====
-function openEndModal(){endModal.style.display="flex";}
-function closeEnd(){endModal.style.display="none";}
+function openEndModal(){
+  let h=prompt("Godzina");
+  let km=prompt("KM");
 
-function saveEnd(){
-  addLog("KONIEC "+endHour.value+" KM:"+endKm.value);
+  addLog("KONIEC "+h+" KM:"+km);
   addLog("ODPOCZYNEK");
   state.mode="odpoczynek";
-  closeEnd();
 }
 
-// ===== WYDRUK (bez zmian – działa) =====
-function printLogs(){ alert("wydruk OK – zostaje jak jest"); }
+// ===== WYDRUK =====
+function printLogs(){
+
+  function toDate(l){
+    let [y,m,d]=l.date.split("-").map(Number);
+    let [hh,mm]=l.time.split(":").map(Number);
+    return new Date(y,m-1,d,hh,mm);
+  }
+
+  let sorted=[...state.logs].sort((a,b)=>toDate(a)-toDate(b));
+
+  let drive=0,work=0,rest=0;
+
+  for(let i=0;i<sorted.length-1;i++){
+    let diff=toDate(sorted[i+1])-toDate(sorted[i]);
+    let t=sorted[i].text.toLowerCase();
+
+    if(t.includes("jazda")){drive+=diff;work+=diff;}
+    else if(t.includes("praca")) work+=diff;
+    else if(t.includes("przerwa")) rest+=diff;
+  }
+
+  let html=`<div class="ticket">
+  <div class="center">*** SIEMENS VDO ***</div>
+  <div class="line"></div>`;
+
+  sorted.forEach(l=>{
+    html+=`${l.date} ${l.time}<br>${l.text}<div class="line"></div>`;
+  });
+
+  html+=`--- PODSUMOWANIE ---<br>
+  JAZDA: ${f(drive)}<br>
+  PRACA: ${f(work)}<br>
+  PRZERWY: ${f(rest)}<br>
+  <div class="line"></div>*** END ***</div>`;
+
+  printArea.innerHTML=html;
+  printArea.style.display="block";
+  window.print();
+}
 
 // ===== RAPORT =====
-function weeklyReport(){ alert("raport OK"); }
+function weeklyReport(){
+
+  function toDate(l){
+    let [y,m,d]=l.date.split("-").map(Number);
+    let [hh,mm]=l.time.split(":").map(Number);
+    return new Date(y,m-1,d,hh,mm);
+  }
+
+  let sorted=[...state.logs].sort((a,b)=>toDate(a)-toDate(b));
+
+  let days={};
+
+  for(let i=0;i<sorted.length-1;i++){
+    let curr=sorted[i];
+    let next=sorted[i+1];
+    let diff=toDate(next)-toDate(curr);
+
+    let d=curr.date;
+    if(!days[d]) days[d]={drive:0,work:0,rest:0};
+
+    let t=curr.text.toLowerCase();
+
+    if(t.includes("jazda")){days[d].drive+=diff;days[d].work+=diff;}
+    else if(t.includes("praca")) days[d].work+=diff;
+    else if(t.includes("przerwa")) days[d].rest+=diff;
+  }
+
+  let html=`<div class="ticket"><div class="center">*** RAPORT ***</div><div class="line"></div>`;
+
+  Object.keys(days).forEach(d=>{
+    html+=`${d}<br>
+    JAZDA: ${f(days[d].drive)}<br>
+    PRACA: ${f(days[d].work)}<br>
+    PRZERWY: ${f(days[d].rest)}<br>
+    <div class="line"></div>`;
+  });
+
+  html+=`*** END ***</div>`;
+
+  printArea.innerHTML=html;
+  printArea.style.display="block";
+  window.print();
+}
+
+// ===== RENDER =====
+function render(){
+
+  work.innerText=f(state.work);
+  drive.innerText=f(state.drive);
+  mode.innerText="TRYB: "+state.mode;
+
+  let req=requiredBreak();
+  breakStatus.innerText=`PRZERWY: ${f(state.breakTime)} / ${f(req)}`;
+  breakStatus.className="status "+(state.breakTime>=req?"green":"red");
+
+  logs.innerHTML="";
+  state.logs.forEach(l=>{
+    let div=document.createElement("div");
+    div.className="log-item";
+    div.innerText=l.date+" "+l.time+" | "+l.text;
+    logs.appendChild(div);
+  });
+}
 
 // ===== SYSTEM =====
 function save(){localStorage.setItem("tacho",JSON.stringify(state));}
