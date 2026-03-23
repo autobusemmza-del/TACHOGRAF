@@ -2,306 +2,251 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tachograf FINAL ITD</title>
+<title>Tacho PRO FINAL</title>
 
 <style>
-body{margin:0;background:#111;font-family:monospace;display:flex;justify-content:center;align-items:center;height:100vh}
-.tacho{width:420px;background:#000;border-radius:25px;box-shadow:0 0 40px #0f0;padding:15px;color:#0f0}
-.screen{background:#020;border-radius:10px;padding:12px;text-align:center;box-shadow:inset 0 0 20px #0f0}
-.buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
-.btn{border:2px solid #0f0;border-radius:50%;height:70px;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.logs{margin-top:10px;height:120px;overflow:auto;background:#000;padding:5px;font-size:11px}
-.green{color:lime}
-.red{color:red}
-.orange{color:orange}
-.log-item{cursor:pointer}
-</style>
+body {
+  background: black;
+  color: #00ff88;
+  font-family: Arial;
+  text-align: center;
+}
 
+.box {
+  border: 2px solid #00ff88;
+  border-radius: 20px;
+  padding: 15px;
+  margin: 15px;
+  box-shadow: 0 0 20px #00ff88;
+}
+
+button {
+  background: black;
+  color: #00ff88;
+  border: 2px solid #00ff88;
+  border-radius: 50%;
+  width: 90px;
+  height: 90px;
+  font-size: 14px;
+  margin: 10px;
+}
+
+.logBox {
+  max-height: 200px;
+  overflow-y: auto;
+  text-align: left;
+  padding: 10px;
+  border-top: 1px solid #00ff88;
+}
+
+.logItem {
+  padding: 5px;
+  border-bottom: 1px solid #003322;
+}
+
+.modal {
+  position: fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  background: rgba(0,0,0,0.9);
+  display:none;
+  justify-content:center;
+  align-items:center;
+}
+
+.modalContent {
+  background:black;
+  border:2px solid #00ff88;
+  padding:20px;
+  border-radius:20px;
+  width:80%;
+}
+
+.modalContent input {
+  width:100%;
+  padding:10px;
+  margin:10px 0;
+}
+
+.modalContent button {
+  width:80px;
+  height:40px;
+  border-radius:10px;
+}
+</style>
 </head>
+
 <body>
 
-<div class="tacho">
-<div class="screen">
-<div id="time"></div>
-<div>PRACA: <span id="work">00:00</span></div>
-<div>JAZDA: <span id="drive">00:00</span></div>
-<div id="breakStatus"></div>
-<div id="restStatus"></div>
-<div id="systemStatus"></div>
-<div id="card" class="red">BRAK KARTY</div>
+<div class="box">
+  <div id="time"></div>
+  <div>PRACA: <span id="praca">00:00</span></div>
+  <div>JAZDA: <span id="jazda">00:00</span></div>
 </div>
 
-<div class="buttons">
-<div class="btn" onclick="insertCard()">🪪</div>
-<div class="btn" onclick="startDay()">▶</div>
-<div class="btn" onclick="setMode('JAZDA')">🚚</div>
-<div class="btn" onclick="setMode('PRACA')">🔧</div>
-<div class="btn" onclick="setMode('PRZERWA')">☕</div>
-<div class="btn" onclick="endDay()">⏹</div>
-<div class="btn" onclick="showWeek()">📅</div>
-<div class="btn" onclick="printWeek()">🖨</div>
-<div class="btn" onclick="resetAll()">⟳</div>
+<div>
+  <button onclick="setMode('PRACA')">PRACA</button>
+  <button onclick="setMode('JAZDA')">JAZDA</button>
+  <button onclick="setMode('PRZERWA')">PAUZA</button>
 </div>
 
-<div class="logs" id="logs"></div>
+<div class="box">
+  <div>LOGI:</div>
+  <div class="logBox" id="logs"></div>
+</div>
+
+<!-- MODAL -->
+<div class="modal" id="modal">
+  <div class="modalContent">
+    <input id="editInput">
+    <button onclick="saveEdit()">ZAPISZ</button>
+    <button onclick="deleteLog()">USUŃ</button>
+    <button onclick="closeModal()">ANULUJ</button>
+  </div>
 </div>
 
 <script>
+let currentMode = localStorage.getItem("mode") || "PRACA";
+let lastChange = parseInt(localStorage.getItem("lastChange")) || Date.now();
 
-// 🔥 PRZYWRACANIE
-let work = parseInt(localStorage.getItem("tacho_work")) || 0;
-let drive = parseInt(localStorage.getItem("tacho_drive")) || 0;
-let mode = localStorage.getItem("tacho_mode") || "";
-let requiredBreaks = parseInt(localStorage.getItem("tacho_req")) || 0;
-let doneBreaks = parseInt(localStorage.getItem("tacho_done")) || 0;
-let breakTime = 0;
-let logs = JSON.parse(localStorage.getItem("tacho_logs") || "[]");
+let praca = parseInt(localStorage.getItem("praca")) || 0;
+let jazda = parseInt(localStorage.getItem("jazda")) || 0;
 
-let timer = null;
-let card = localStorage.getItem("tacho_card") === "true";
-let restStart = localStorage.getItem("tacho_rest") ? parseInt(localStorage.getItem("tacho_rest")) : null;
+let logs = JSON.parse(localStorage.getItem("logs")) || [];
 
-// START
-updateDisplay();
-updateBreakStatus();
-updateSystem();
-renderLogs();
+let editIndex = null;
 
-if(card){
-document.getElementById("card").innerText="KARTA OK";
-document.getElementById("card").className="green";
+// =====================
+// SILNIK CZASU
+// =====================
+function updateTime() {
+  let now = Date.now();
+  let diff = Math.floor((now - lastChange) / 1000);
+
+  let tempPraca = praca;
+  let tempJazda = jazda;
+
+  if (currentMode === "PRACA") tempPraca += diff;
+  if (currentMode === "JAZDA") tempJazda += diff;
+
+  document.getElementById("praca").innerText = format(tempPraca);
+  document.getElementById("jazda").innerText = format(tempJazda);
+
+  document.getElementById("time").innerText =
+    new Date().toLocaleString();
 }
 
-if(mode){
-setMode(mode);
+setInterval(updateTime, 1000);
+
+// =====================
+// ZMIANA TRYBU
+// =====================
+function setMode(newMode) {
+  if (currentMode === newMode) return;
+
+  let now = Date.now();
+  let diff = Math.floor((now - lastChange) / 1000);
+
+  if (currentMode === "PRACA") praca += diff;
+  if (currentMode === "JAZDA") jazda += diff;
+
+  lastChange = now;
+  currentMode = newMode;
+
+  localStorage.setItem("mode", currentMode);
+  localStorage.setItem("lastChange", lastChange);
+  localStorage.setItem("praca", praca);
+  localStorage.setItem("jazda", jazda);
+
+  addLog("TRYB " + newMode);
 }
 
-// CLOCK
-function updateClock(){
-document.getElementById("time").innerText=new Date().toLocaleString();
-}
-setInterval(updateClock,1000);
-
-// FORMAT
-function format(ms){
-let s=Math.floor(ms/1000);
-let h=Math.floor(s/3600);
-let m=Math.floor((s%3600)/60);
-return("0"+h).slice(-2)+":"+("0"+m).slice(-2);
-}
-
-// KARTA
-function insertCard(){
-card=true;
-localStorage.setItem("tacho_card", true);
-document.getElementById("card").innerText="KARTA OK";
-document.getElementById("card").className="green";
-log("KARTA WLOZONA");
-updateSystem();
-}
-
-// START DNIA
-function startDay(){
-if(!card){log("NARUSZENIE BRAK KARTY");updateSystem();return}
-
-let w=prompt("Czas pracy hh:mm");
-let d=prompt("Czas jazdy hh:mm");
-
-let workH=parseInt(w.split(":")[0]);
-let driveH=parseInt(d.split(":")[0]);
-
-requiredBreaks=0;
-doneBreaks=0;
-
-if(workH>6) requiredBreaks=1;
-if(driveH>=6&&driveH<=8) requiredBreaks=2;
-if(driveH>8) requiredBreaks=3;
-
-saveState();
-updateBreakStatus();
-log("START DNIA | przerwy:"+requiredBreaks);
-}
-
-// TRYB
-function setMode(m){
-if(!card){log("NARUSZENIE BRAK KARTY");updateSystem();return}
-
-mode=m;
-localStorage.setItem("tacho_mode", mode);
-
-log("TRYB "+m);
-
-if(timer) clearInterval(timer);
-
-timer=setInterval(()=>{
-
-if(mode==="JAZDA"){work+=1000;drive+=1000}
-if(mode==="PRACA"){work+=1000}
-if(mode==="PRZERWA"){
-work+=1000;
-breakTime+=1000;
-if(breakTime>=15*60000){
-breakTime=0;
-doneBreaks++;
-updateBreakStatus();
-log("PRZERWA "+doneBreaks+"/"+requiredBreaks);
-}
-}
-
-updateDisplay();
-saveState();
-
-},1000);
-}
-
-// WYŚWIETLANIE
-function updateDisplay(){
-document.getElementById("work").innerText=format(work);
-document.getElementById("drive").innerText=format(drive);
-}
-
-// PRZERWY
-function updateBreakStatus(){
-let el=document.getElementById("breakStatus");
-
-if(requiredBreaks===0){
-el.innerHTML="PRZERWY: BRAK";
-}else if(doneBreaks===requiredBreaks){
-el.innerHTML="<span class='green'>PRZERWY OK "+doneBreaks+"/"+requiredBreaks+"</span>";
-}else if(doneBreaks>0){
-el.innerHTML="<span class='orange'>PRZERWY "+doneBreaks+"/"+requiredBreaks+"</span>";
-}else{
-el.innerHTML="<span class='red'>PRZERWY 0/"+requiredBreaks+"</span>";
-}
-
-updateSystem();
-}
-
-// KONIEC DNIA
-function endDay(){
-log("KONIEC DNIA");
-restStart=Date.now();
-localStorage.setItem("tacho_rest", restStart);
-saveDay();
-updateSystem();
-}
-
-// ZAPIS DNIA
-function saveDay(){
-let week=JSON.parse(localStorage.getItem("week7")||"[]");
-
-week.push({
-date:new Date().toLocaleDateString(),
-work,drive,requiredBreaks,doneBreaks
-});
-
-while(week.length>7)week.shift();
-
-localStorage.setItem("week7",JSON.stringify(week));
-}
-
+// =====================
 // LOGI
-function log(txt){
-let t=new Date().toLocaleTimeString();
-logs.push(t+" - "+txt);
-localStorage.setItem("tacho_logs", JSON.stringify(logs));
-renderLogs();
+// =====================
+function addLog(text) {
+  let time = new Date().toLocaleTimeString();
+  logs.push(time + " - " + text);
+  saveLogs();
+  renderLogs();
 }
 
-// 🔥 EDYCJA LOGÓW
-function renderLogs(){
-let html="";
-logs.forEach((l,i)=>{
-html+=`<div class="log-item" onclick="editLog(${i})">${l}</div>`;
-});
-document.getElementById("logs").innerHTML=html;
+function renderLogs() {
+  let box = document.getElementById("logs");
+  box.innerHTML = "";
+
+  logs.forEach((log, i) => {
+    let div = document.createElement("div");
+    div.className = "logItem";
+    div.innerText = log;
+    div.onclick = () => openModal(i);
+    box.appendChild(div);
+  });
 }
 
-function editLog(index){
-let current = logs[index];
-let edited = prompt("Edytuj log:", current);
-
-if(edited !== null && edited !== ""){
-logs[index] = edited;
-localStorage.setItem("tacho_logs", JSON.stringify(logs));
-renderLogs();
-}
+function saveLogs() {
+  localStorage.setItem("logs", JSON.stringify(logs));
 }
 
-// SYSTEM
-function updateSystem(){
-let ok=true;
-
-if(!card) ok=false;
-if(requiredBreaks>0 && doneBreaks<requiredBreaks) ok=false;
-
-let el=document.getElementById("systemStatus");
-
-if(ok){
-el.innerHTML="<span class='green'>SYSTEM OK</span>";
-}else{
-el.innerHTML="<span class='red'>SYSTEM NARUSZENIE</span>";
-}
+// =====================
+// MODAL
+// =====================
+function openModal(index) {
+  editIndex = index;
+  document.getElementById("editInput").value = logs[index];
+  document.getElementById("modal").style.display = "flex";
 }
 
-// ODPOCZYNEK
-function checkRest(){
-if(!restStart)return;
-
-let rest=Date.now()-restStart;
-let el=document.getElementById("restStatus");
-
-if(rest>=11*3600000){
-el.innerHTML="<span class='green'>ODPOCZYNEK OK</span>";
-}else{
-el.innerHTML="<span class='red'>ODPOCZYNEK <11h</span>";
+function closeModal() {
+  document.getElementById("modal").style.display = "none";
 }
 
-updateSystem();
-}
-setInterval(checkRest,5000);
-
-// PODGLĄD
-function showWeek(){
-let week=JSON.parse(localStorage.getItem("week7")||"[]");
-let txt="";
-
-week.forEach(d=>{
-txt+=d.date+" | PRACA:"+format(d.work)+" JAZDA:"+format(d.drive)+" PRZERWY:"+d.doneBreaks+"/"+d.requiredBreaks+"\n"
-});
-
-alert(txt);
+function saveEdit() {
+  logs[editIndex] = document.getElementById("editInput").value;
+  saveLogs();
+  renderLogs();
+  closeModal();
 }
 
-// DRUK
-function printWeek(){
-let week=JSON.parse(localStorage.getItem("week7")||"[]");
-let txt="";
-
-week.forEach(d=>{
-txt+=d.date+"\nPRACA:"+format(d.work)+" JAZDA:"+format(d.drive)+" PRZERWY:"+d.doneBreaks+"/"+d.requiredBreaks+"\n\n"
-});
-
-let w=window.open();
-w.document.write("<pre>"+txt+"</pre>");
-w.print();
+function deleteLog() {
+  logs.splice(editIndex, 1);
+  saveLogs();
+  renderLogs();
+  closeModal();
 }
 
-// ZAPIS
-function saveState(){
-localStorage.setItem("tacho_work", work);
-localStorage.setItem("tacho_drive", drive);
-localStorage.setItem("tacho_req", requiredBreaks);
-localStorage.setItem("tacho_done", doneBreaks);
+// =====================
+// FORMAT
+// =====================
+function format(sec) {
+  let h = Math.floor(sec / 3600);
+  let m = Math.floor((sec % 3600) / 60);
+  return String(h).padStart(2,'0') + ":" + String(m).padStart(2,'0');
 }
 
-// RESET
-function resetAll(){
-localStorage.clear();
-location.reload();
+// =====================
+// INIT
+// =====================
+function init() {
+  let now = Date.now();
+  let diff = Math.floor((now - lastChange) / 1000);
+
+  if (currentMode === "PRACA") praca += diff;
+  if (currentMode === "JAZDA") jazda += diff;
+
+  lastChange = now;
+
+  localStorage.setItem("lastChange", lastChange);
+  localStorage.setItem("praca", praca);
+  localStorage.setItem("jazda", jazda);
+
+  renderLogs();
 }
 
+init();
 </script>
+
 </body>
 </html>
