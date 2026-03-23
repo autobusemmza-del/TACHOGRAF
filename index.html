@@ -3,16 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v3.1</title>
+<title>TACHOGRAF MZA PRO v3.2</title>
 
 <style>
-body{
-  margin:0;
-  background:#0a0a0a;
-  color:#00ff88;
-  font-family:monospace;
-}
-
+body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
 .container{padding:10px;}
 
 .display{
@@ -22,95 +16,34 @@ body{
   box-shadow:0 0 25px #00ff88;
 }
 
-.time{
-  font-size:20px;
-  text-align:center;
-}
-
-.status{
-  margin-top:10px;
-  padding:5px;
-  border:1px solid #333;
-  text-align:center;
-}
-
-.red{color:red;}
-.green{color:#00ff88;}
+.time{text-align:center;font-size:18px;}
+.status{margin-top:10px;padding:5px;border:1px solid #333;text-align:center;}
+.red{color:red;} .green{color:#00ff88;}
 
 button{
-  width:100%;
-  margin:5px 0;
-  padding:12px;
-  background:#111;
-  color:#00ff88;
-  border:none;
-  font-size:16px;
+  width:100%;margin:5px 0;padding:12px;
+  background:#111;color:#00ff88;border:none;
 }
 
 /* LOGI */
-.logs{
-  margin-top:10px;
-  max-height:200px;
-  overflow:auto;
-  background:#000;
-  border:1px solid #333;
-}
+.logs{margin-top:10px;max-height:200px;overflow:auto;background:#000;border:1px solid #333;}
+.log-item{padding:6px;border-bottom:1px solid #222;cursor:pointer;}
 
-.log-item{
-  padding:6px;
-  border-bottom:1px solid #222;
-  cursor:pointer;
-}
-
-/* MODALE */
+/* MODAL */
 .modal{
-  position:fixed;
-  top:0; left:0;
-  width:100%; height:100%;
+  position:fixed;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.95);
-  display:none;
-  justify-content:center;
-  align-items:center;
+  display:none;justify-content:center;align-items:center;
   z-index:99999;
-  pointer-events:auto;
 }
 
 .box{
-  background:#111;
-  padding:20px;
-  border:2px solid #00ff88;
-  width:85%;
+  background:#111;padding:20px;border:2px solid #00ff88;width:85%;
 }
 
 .box input{
-  width:100%;
-  padding:10px;
-  margin:5px 0;
-  font-size:16px;
+  width:100%;padding:10px;margin:5px 0;font-size:16px;
 }
-
-/* WYDRUK */
-@media print {
-  body * { display:none; }
-  #printArea, #printArea * { display:block; }
-}
-
-.print{
-  display:none;
-  background:white;
-  color:black;
-  font-family:monospace;
-  padding:10px;
-}
-
-.ticket{
-  width:260px;
-  margin:auto;
-  font-size:12px;
-}
-
-.center{text-align:center;}
-.line{border-top:1px dashed black; margin:5px 0;}
 </style>
 </head>
 
@@ -123,8 +56,13 @@ button{
 <div id="mode">TRYB: ---</div>
 
 <div class="status" id="breakStatus"></div>
-<div>PRACA: <span id="work"></span></div>
-<div>JAZDA: <span id="drive"></span></div>
+
+<div>PRACA (deklar): <span id="workDecl"></span></div>
+<div>PRACA (real): <span id="workReal"></span></div>
+
+<div>JAZDA (deklar): <span id="driveDecl"></span></div>
+<div>JAZDA (real): <span id="driveReal"></span></div>
+
 </div>
 
 <button onclick="openCard()">WŁÓŻ KARTĘ</button>
@@ -132,37 +70,54 @@ button{
 <button onclick="setMode('jazda')">JAZDA</button>
 <button onclick="setMode('praca')">INNA PRACA</button>
 <button onclick="setMode('przerwa')">PRZERWA</button>
-<button onclick="endDay()">KONIEC PRACY</button>
-<button onclick="printLogs()">WYDRUK</button>
+<button onclick="openEndModal()">KONIEC PRACY</button>
 <button onclick="resetAll()">RESET</button>
 
 <div class="logs" id="logs"></div>
 
 </div>
 
-<!-- MODAL KARTA -->
+<!-- KARTA -->
 <div class="modal" id="cardModal">
 <div class="box">
-<h3>KARTA KIEROWCY</h3>
-
+<h3>KARTA</h3>
 <input id="cardName" placeholder="Imię">
 <input id="cardSurname" placeholder="Nazwisko">
 <input id="cardNumber" placeholder="Nr karty">
-
 <input id="cardWork" placeholder="PRACA hh:mm">
 <input id="cardDrive" placeholder="JAZDA hh:mm">
-
 <button onclick="insertCard()">START</button>
 <button onclick="closeCard()">ANULUJ</button>
 </div>
 </div>
 
-<div id="printArea" class="print"></div>
+<!-- EDYCJA LOG -->
+<div class="modal" id="editModal">
+<div class="box">
+<input id="editText">
+<button onclick="saveLog()">ZAPISZ</button>
+<button onclick="deleteLog()">USUŃ</button>
+<button onclick="closeEdit()">ANULUJ</button>
+</div>
+</div>
+
+<!-- KONIEC -->
+<div class="modal" id="endModal">
+<div class="box">
+<h3>KONIEC PRACY</h3>
+<input id="endHour" placeholder="Godzina hh:mm">
+<input id="endKm" placeholder="Kilometry">
+<button onclick="saveEnd()">ZAPISZ</button>
+<button onclick="closeEnd()">ANULUJ</button>
+</div>
+</div>
 
 <script>
 let state = JSON.parse(localStorage.getItem("tacho")) || {
   work:0,
   drive:0,
+  realWork:0,
+  realDrive:0,
   breakTime:0,
   mode:"---",
   last:Date.now(),
@@ -170,11 +125,13 @@ let state = JSON.parse(localStorage.getItem("tacho")) || {
   driver:null
 };
 
-/* CZAS */
+let editIndex=null;
+
+/* TIME */
 setInterval(()=>{
   let d=new Date();
   document.getElementById("time").innerText =
-    d.toLocaleString("pl-PL",{weekday:'long', hour:'2-digit', minute:'2-digit', second:'2-digit', day:'2-digit', month:'2-digit', year:'numeric'});
+    d.toLocaleString("pl-PL");
 },1000);
 
 /* FORMAT */
@@ -190,8 +147,8 @@ setInterval(()=>{
   let now=Date.now();
   let diff=now-state.last;
 
-  if(state.mode!=="---") state.work+=diff;
-  if(state.mode==="jazda") state.drive+=diff;
+  if(state.mode!=="---") state.realWork+=diff;
+  if(state.mode==="jazda") state.realDrive+=diff;
   if(state.mode==="przerwa") state.breakTime+=diff;
 
   state.last=now;
@@ -199,87 +156,54 @@ setInterval(()=>{
   render();
 },1000);
 
-/* PRZERWY */
-function reqBreak(){
-  let d=state.drive/3600000;
-  if(d>8) return 45*60000;
-  if(d>=6) return 30*60000;
-  if(state.work>6*3600000) return 15*60000;
-  return 0;
-}
-
 /* RENDER */
 function render(){
-  document.getElementById("work").innerText=f(state.work);
-  document.getElementById("drive").innerText=f(state.drive);
+  document.getElementById("workDecl").innerText=f(state.work);
+  document.getElementById("driveDecl").innerText=f(state.drive);
+  document.getElementById("workReal").innerText=f(state.realWork);
+  document.getElementById("driveReal").innerText=f(state.realDrive);
 
-  let req=reqBreak();
-  let el=document.getElementById("breakStatus");
-
-  el.innerText="PRZERWY: "+f(state.breakTime)+" / "+f(req);
-  el.className="status "+(state.breakTime>=req?"green":"red");
-
-  document.getElementById("mode").innerText="TRYB: "+state.mode.toUpperCase();
+  document.getElementById("mode").innerText="TRYB: "+state.mode;
 
   let logsEl=document.getElementById("logs");
   logsEl.innerHTML="";
-  state.logs.forEach(l=>{
+  state.logs.forEach((l,i)=>{
     let div=document.createElement("div");
     div.className="log-item";
     div.innerText=l.time+" | "+l.text;
+    div.onclick=()=>editLog(i);
     logsEl.appendChild(div);
   });
 }
 
 /* TRYB */
 function setMode(m){
-  if(!state.driver){
-    alert("Najpierw włóż kartę!");
-    return;
-  }
+  if(!state.driver){alert("Włóż kartę!");return;}
   state.mode=m;
   addLog("TRYB: "+m);
 }
 
 /* KARTA */
-function openCard(){
-  document.getElementById("cardModal").style.display="flex";
-}
-
-function closeCard(){
-  document.getElementById("cardModal").style.display="none";
-}
+function openCard(){document.getElementById("cardModal").style.display="flex";}
+function closeCard(){document.getElementById("cardModal").style.display="none";}
 
 function insertCard(){
   let name=document.getElementById("cardName").value;
   let surname=document.getElementById("cardSurname").value;
   let number=document.getElementById("cardNumber").value;
 
-  let w=document.getElementById("cardWork").value;
-  let d=document.getElementById("cardDrive").value;
+  let [h1,m1]=document.getElementById("cardWork").value.split(":").map(Number);
+  let [h2,m2]=document.getElementById("cardDrive").value.split(":").map(Number);
 
-  let [h1,m1]=w.split(":").map(Number);
-  let [h2,m2]=d.split(":").map(Number);
-
-  if(!name || !surname || !number){
-    alert("Uzupełnij dane kierowcy");
-    return;
-  }
-
-  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)){
-    alert("Błędny format czasu");
-    return;
-  }
+  if(!name||!surname||!number){alert("Dane!");return;}
+  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)){alert("Czas!");return;}
 
   state.driver={name,surname,number};
   state.work=((h1*60)+m1)*60000;
   state.drive=((h2*60)+m2)*60000;
 
-  addLog("KARTA WŁOŻONA: "+name+" "+surname);
-
+  addLog("KARTA: "+name+" "+surname);
   closeCard();
-  save();
-  render();
 }
 
 /* LOGI */
@@ -287,46 +211,40 @@ function addLog(t){
   state.logs.unshift({time:new Date().toLocaleString(), text:t});
 }
 
-/* KONIEC */
-function endDay(){
-  let h=prompt("Godzina hh:mm");
-  let km=prompt("KM");
-  addLog("KONIEC "+h+" KM:"+km);
+function editLog(i){
+  editIndex=i;
+  document.getElementById("editText").value=state.logs[i].text;
+  document.getElementById("editModal").style.display="flex";
 }
 
-/* WYDRUK */
-function printLogs(){
-  let html=`
-  <div class="ticket">
-  <div class="center">*** SIEMENS VDO ***</div>
-  <div class="line"></div>
+function saveLog(){
+  state.logs[editIndex].text=document.getElementById("editText").value;
+  closeEdit(); save();
+}
 
-  KIEROWCA:<br>
-  ${state.driver?.name || "---"} ${state.driver?.surname || ""}<br>
-  NR: ${state.driver?.number || "---"}<br>
+function deleteLog(){
+  state.logs.splice(editIndex,1);
+  closeEdit(); save();
+}
 
-  <div class="line"></div>
+function closeEdit(){
+  document.getElementById("editModal").style.display="none";
+}
 
-  PRACA: ${f(state.work)}<br>
-  JAZDA: ${f(state.drive)}<br>
-  PRZERWY: ${f(state.breakTime)}<br>
+/* KONIEC */
+function openEndModal(){
+  document.getElementById("endModal").style.display="flex";
+}
 
-  <div class="line"></div>
+function closeEnd(){
+  document.getElementById("endModal").style.display="none";
+}
 
-  ZDARZENIA:<br>
-  `;
-
-  state.logs.slice(0,40).reverse().forEach(l=>{
-    html+=`${l.time}<br>${l.text}<br>`;
-  });
-
-  html+=`<div class="line"></div>*** END ***</div>`;
-
-  let p=document.getElementById("printArea");
-  p.innerHTML=html;
-  p.style.display="block";
-
-  window.print();
+function saveEnd(){
+  let h=document.getElementById("endHour").value;
+  let km=document.getElementById("endKm").value;
+  addLog("KONIEC "+h+" KM:"+km);
+  closeEnd();
 }
 
 /* RESET */
