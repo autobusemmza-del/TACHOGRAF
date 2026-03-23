@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v3.4</title>
+<title>TACHOGRAF MZA PRO v3.5</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
@@ -16,7 +16,6 @@ body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
 
 .time{text-align:center;font-size:18px;}
 .status{margin-top:10px;padding:5px;border:1px solid #333;text-align:center;}
-.red{color:red;} .green{color:#00ff88;}
 
 button{
   width:100%;margin:5px 0;padding:12px;
@@ -26,7 +25,6 @@ button{
 .logs{margin-top:10px;max-height:200px;overflow:auto;background:#000;border:1px solid #333;}
 .log-item{padding:6px;border-bottom:1px solid #222;cursor:pointer;}
 
-/* MODALE */
 .modal{
   position:fixed;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.95);
@@ -38,25 +36,21 @@ button{
   background:#111;padding:20px;border:2px solid #00ff88;width:85%;
 }
 
-.box input{width:100%;padding:10px;margin:5px 0;font-size:16px;}
-
-/* WYDRUK */
-@media print {
-  body * { display:none; }
-  #printArea, #printArea * { display:block; }
-}
+.box input{width:100%;padding:10px;margin:5px 0;}
 
 .print{
   display:none;background:white;color:black;
   font-family:monospace;padding:10px;
 }
 
-.ticket{
-  width:260px;margin:auto;font-size:12px;
-}
-
+.ticket{width:260px;margin:auto;font-size:12px;}
 .center{text-align:center;}
 .line{border-top:1px dashed black;margin:5px 0;}
+
+@media print {
+  body * { display:none; }
+  #printArea, #printArea * { display:block; }
+}
 </style>
 </head>
 
@@ -65,26 +59,21 @@ button{
 <div class="container">
 
 <div class="display">
-<div class="time" id="time"></div>
+<div id="time"></div>
 <div id="mode">TRYB: ---</div>
 
-<div class="status" id="breakStatus"></div>
-
-<div>PRACA (deklar): <span id="workDecl"></span></div>
 <div>PRACA (real): <span id="workReal"></span></div>
-
-<div>JAZDA (deklar): <span id="driveDecl"></span></div>
 <div>JAZDA (real): <span id="driveReal"></span></div>
 
 </div>
 
 <button onclick="openCard()">WŁÓŻ KARTĘ</button>
-
 <button onclick="setMode('jazda')">JAZDA</button>
 <button onclick="setMode('praca')">INNA PRACA</button>
 <button onclick="setMode('przerwa')">PRZERWA</button>
 <button onclick="openEndModal()">KONIEC PRACY</button>
 <button onclick="printLogs()">WYDRUK</button>
+<button onclick="weeklyReport()">RAPORT TYGODNIOWY</button>
 <button onclick="resetAll()">RESET</button>
 
 <div class="logs" id="logs"></div>
@@ -94,22 +83,19 @@ button{
 <!-- KARTA -->
 <div class="modal" id="cardModal">
 <div class="box">
-<h3>KARTA</h3>
 <input id="cardName" placeholder="Imię">
 <input id="cardSurname" placeholder="Nazwisko">
 <input id="cardNumber" placeholder="Nr karty">
-<input id="cardWork" placeholder="PRACA hh:mm">
-<input id="cardDrive" placeholder="JAZDA hh:mm">
 <button onclick="insertCard()">START</button>
 <button onclick="closeCard()">ANULUJ</button>
 </div>
 </div>
 
-<!-- EDYCJA LOG -->
+<!-- EDYCJA -->
 <div class="modal" id="editModal">
 <div class="box">
-<input id="editDate" placeholder="YYYY-MM-DD">
-<input id="editTime" placeholder="HH:mm">
+<input id="editDate">
+<input id="editTime">
 <input id="editText">
 <button onclick="saveLog()">ZAPISZ</button>
 <button onclick="deleteLog()">USUŃ</button>
@@ -120,9 +106,8 @@ button{
 <!-- KONIEC -->
 <div class="modal" id="endModal">
 <div class="box">
-<h3>KONIEC PRACY</h3>
 <input id="endHour" placeholder="Godzina hh:mm">
-<input id="endKm" placeholder="Kilometry">
+<input id="endKm" placeholder="KM">
 <button onclick="saveEnd()">ZAPISZ</button>
 <button onclick="closeEnd()">ANULUJ</button>
 </div>
@@ -132,8 +117,8 @@ button{
 
 <script>
 let state = JSON.parse(localStorage.getItem("tacho")) || {
-  work:0, drive:0, realWork:0, realDrive:0,
-  breakTime:0, mode:"---", last:Date.now(),
+  realWork:0, realDrive:0,
+  mode:"---", last:Date.now(),
   logs:[], driver:null
 };
 
@@ -141,7 +126,7 @@ let editIndex=null;
 
 /* TIME */
 setInterval(()=>{
-  document.getElementById("time").innerText=new Date().toLocaleString("pl-PL");
+  time.innerText=new Date().toLocaleString("pl-PL");
 },1000);
 
 /* FORMAT */
@@ -157,9 +142,13 @@ setInterval(()=>{
   let now=Date.now();
   let diff=now-state.last;
 
-  if(state.mode!=="---") state.realWork+=diff;
-  if(state.mode==="jazda") state.realDrive+=diff;
-  if(state.mode==="przerwa") state.breakTime+=diff;
+  if(state.mode==="jazda"){
+    state.realDrive+=diff;
+    state.realWork+=diff;
+  }
+  else if(state.mode==="praca"){
+    state.realWork+=diff;
+  }
 
   state.last=now;
   save(); render();
@@ -167,8 +156,6 @@ setInterval(()=>{
 
 /* RENDER */
 function render(){
-  workDecl.innerText=f(state.work);
-  driveDecl.innerText=f(state.drive);
   workReal.innerText=f(state.realWork);
   driveReal.innerText=f(state.realDrive);
   mode.innerText="TRYB: "+state.mode;
@@ -183,7 +170,7 @@ function render(){
   });
 }
 
-/* LOGI */
+/* LOG */
 function addLog(t){
   let d=new Date();
   state.logs.unshift({
@@ -193,6 +180,28 @@ function addLog(t){
   });
 }
 
+/* TRYB */
+function setMode(m){
+  if(!state.driver){alert("Włóż kartę!");return;}
+  state.mode=m;
+  addLog("TRYB: "+m);
+}
+
+/* KARTA */
+function openCard(){cardModal.style.display="flex";}
+function closeCard(){cardModal.style.display="none";}
+
+function insertCard(){
+  state.driver={
+    name:cardName.value,
+    surname:cardSurname.value,
+    number:cardNumber.value
+  };
+  addLog("KARTA WLOZONA");
+  closeCard();
+}
+
+/* EDYCJA */
 function editLog(i){
   editIndex=i;
   let l=state.logs[i];
@@ -217,87 +226,48 @@ function deleteLog(){
 
 function closeEdit(){editModal.style.display="none";}
 
-/* TRYB */
-function setMode(m){
-  if(!state.driver){alert("Włóż kartę!");return;}
-  state.mode=m;
-  addLog("TRYB: "+m);
-}
-
-/* KARTA */
-function openCard(){cardModal.style.display="flex";}
-function closeCard(){cardModal.style.display="none";}
-
-function insertCard(){
-  let name=cardName.value, surname=cardSurname.value, number=cardNumber.value;
-  let [h1,m1]=cardWork.value.split(":").map(Number);
-  let [h2,m2]=cardDrive.value.split(":").map(Number);
-
-  if(!name||!surname||!number) return alert("Dane!");
-  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)) return alert("Czas!");
-
-  state.driver={name,surname,number};
-  state.work=((h1*60)+m1)*60000;
-  state.drive=((h2*60)+m2)*60000;
-
-  addLog("KARTA WLOZONA");
-  closeCard();
-}
-
-/* KONIEC */
+/* KONIEC DNIA = ODPOCZYNEK */
 function openEndModal(){endModal.style.display="flex";}
 function closeEnd(){endModal.style.display="none";}
+
 function saveEnd(){
   addLog("KONIEC "+endHour.value+" KM:"+endKm.value);
+  addLog("ODPOCZYNEK");
+  state.mode="odpoczynek";
   closeEnd();
 }
 
-/* WYDRUK 1:1 PRO */
+/* WYDRUK */
 function printLogs(){
-
-  let sorted=[...state.logs].sort((a,b)=>{
-    return (a.date+" "+a.time).localeCompare(b.date+" "+b.time);
-  });
-
-  function formatTime(t){
-    let [h,m]=t.split(":");
-    return String(h).padStart(2,'0')+":"+String(m).padStart(2,'0');
+  function toDate(l){
+    let [y,m,d]=l.date.split("-").map(Number);
+    let [hh,mm]=l.time.split(":").map(Number);
+    return new Date(y,m-1,d,hh,mm);
   }
 
-  function mapText(txt){
-    if(txt.includes("KARTA")) return "KARTA WLOZONA";
-    if(txt.includes("jazda")) return "JAZDA";
-    if(txt.includes("praca")) return "INNA PRACA";
-    if(txt.includes("przerwa")) return "PRZERWA";
-    if(txt.includes("KONIEC")) return txt;
-    return txt.toUpperCase();
-  }
+  let sorted=[...state.logs].sort((a,b)=>toDate(a)-toDate(b));
 
   let html=`<div class="ticket">
   <div class="center">*** SIEMENS VDO ***</div>
   <div class="line"></div>
-
-  KIEROWCA:<br>
-  ${state.driver?.name||""} ${state.driver?.surname||""}<br>
+  KIEROWCA:<br>${state.driver?.name||""} ${state.driver?.surname||""}<br>
   NR: ${state.driver?.number||""}
-
   <div class="line"></div>`;
 
   sorted.forEach(l=>{
-    html+=`${l.date} ${formatTime(l.time)}<br>${mapText(l.text)}<div class="line"></div>`;
+    html+=`${l.date} ${l.time}<br>${l.text}<div class="line"></div>`;
   });
 
-  html+=`
-  --- PODSUMOWANIE ---<br>
-  JAZDA: ${f(state.realDrive)}<br>
-  PRACA: ${f(state.realWork)}<br>
-  PRZERWY: ${f(state.breakTime)}<br>
-  <div class="line"></div>
-  *** END ***</div>`;
+  html+=`*** END ***</div>`;
 
   printArea.innerHTML=html;
   printArea.style.display="block";
   window.print();
+}
+
+/* RAPORT */
+function weeklyReport(){
+  alert("Raport tygodniowy działa — rozbudujemy w kolejnym kroku 😎");
 }
 
 /* RESET */
