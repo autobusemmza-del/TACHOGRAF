@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v4.5</title>
+<title>TACHOGRAF MZA PRO v4.7 REAL</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
@@ -31,10 +31,13 @@ button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border
 
 <div class="display">
 <div class="time" id="time"></div>
-<div id="mode"></div>
+<div id="mode">TRYB: ---</div>
 <div class="status" id="breakStatus"></div>
+
 <div>PRACA: <span id="work"></span></div>
 <div>JAZDA: <span id="drive"></span></div>
+<div>INNA: <span id="other"></span></div>
+
 </div>
 
 <button onclick="openCard()">WŁÓŻ KARTĘ</button>
@@ -83,7 +86,7 @@ button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border
 let state = JSON.parse(localStorage.getItem("tacho")) || {
  logs:[], mode:"---", driver:null,
  declaredWork:0, declaredDrive:0,
- work:0, drive:0,
+ work:0, drive:0, other:0,
  breakTime:0, breakCycle:0,
  active:false, last:Date.now()
 };
@@ -104,7 +107,6 @@ function f(ms){
  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 
-// ===== WALIDACJA =====
 function valid(t){return /^\d{1,2}:\d{2}$/.test(t);}
 
 // ===== TICK =====
@@ -114,8 +116,12 @@ setInterval(()=>{
  let now=Date.now();
  let diff=now-state.last;
 
- if(state.mode!=="odpoczynek") state.work+=diff;
+ if(state.mode==="jazda" || state.mode==="praca" || state.mode==="przerwa"){
+   state.work+=diff;
+ }
+
  if(state.mode==="jazda") state.drive+=diff;
+ if(state.mode==="praca") state.other+=diff;
 
  if(state.mode==="przerwa"){
   state.breakCycle+=diff;
@@ -146,7 +152,7 @@ function addLog(t){
  let d=new Date();
  state.logs.push({
   date:d.toISOString().slice(0,10),
-  time:d.toTimeString().slice(0,5),
+  time:d.toTimeString().slice(0,8),
   text:t
  });
  save(); render();
@@ -156,6 +162,7 @@ function addLog(t){
 function setMode(m){
  if(!state.driver){alert("Włóż kartę");return;}
  if(!state.active){alert("Zakończony dzień");return;}
+
  state.mode=m;
  addLog("TRYB: "+m);
 }
@@ -176,13 +183,14 @@ function insertCard(){
  state.declaredWork=(h1*60+m1)*60000;
  state.declaredDrive=(h2*60+m2)*60000;
 
- state.work=0; state.drive=0;
+ state.work=0; state.drive=0; state.other=0;
  state.breakTime=0; state.breakCycle=0;
 
  state.driver={name:driverName.value||"KIEROWCA",nr:driverNr.value||"-"};
 
  state.active=true;
- state.mode="praca";
+ state.mode="---"; // 🔥 brak liczenia
+
  state.last=Date.now();
 
  addLog("KARTA");
@@ -222,7 +230,7 @@ function saveEnd(){
  if(!valid(endHour.value)){alert("hh:mm");return;}
 
  addLog("KONIEC "+endHour.value+" KM:"+endKm.value);
- addLog("ODPOCZYNEK");
+ addLog("TRYB: odpoczynek");
 
  state.mode="odpoczynek";
  state.active=false;
@@ -234,8 +242,8 @@ function saveEnd(){
 // ===== SORT =====
 function getSortedLogs(){
  return [...state.logs].sort((a,b)=>{
-   let da=new Date(a.date+" "+a.time);
-   let db=new Date(b.date+" "+b.time);
+   let da=new Date(a.date+"T"+a.time);
+   let db=new Date(b.date+"T"+b.time);
    return da-db;
  });
 }
@@ -245,15 +253,24 @@ function printLogs(){
 
  let sorted=getSortedLogs();
 
- let drive=0,work=0,rest=0;
+ let drive=0,work=0,rest=0,other=0;
 
  for(let i=0;i<sorted.length-1;i++){
-  let diff=new Date(sorted[i+1].date+" "+sorted[i+1].time)-new Date(sorted[i].date+" "+sorted[i].time);
+  let diff=new Date(sorted[i+1].date+"T"+sorted[i+1].time)-new Date(sorted[i].date+"T"+sorted[i].time);
   let t=sorted[i].text.toLowerCase();
 
-  if(t.includes("jazda")){drive+=diff;work+=diff;}
-  else if(t.includes("praca")) work+=diff;
-  else if(t.includes("przerwa")) rest+=diff;
+  if(t.includes("jazda")){
+    drive+=diff;
+    work+=diff;
+  }
+  else if(t.includes("praca")){
+    other+=diff;
+    work+=diff;
+  }
+  else if(t.includes("przerwa")){
+    rest+=diff;
+    work+=diff;
+  }
  }
 
  let html=`<div class="ticket">
@@ -270,9 +287,10 @@ function printLogs(){
 
  html+=`--- PODSUMOWANIE ---<br>
  JAZDA: ${f(drive)}<br>
- PRACA: ${f(work)}<br>
+ INNA: ${f(other)}<br>
  PRZERWY: ${f(rest)}<br>
- <div class="line"></div>END`;
+ PRACA: ${f(work)}<br>
+ <div class="line"></div>*** END ***`;
 
  printArea.innerHTML=html;
  printArea.style.display="block";
@@ -288,28 +306,38 @@ function weeklyReport(){
  for(let i=0;i<sorted.length-1;i++){
   let curr=sorted[i];
   let next=sorted[i+1];
-  let diff=new Date(next.date+" "+next.time)-new Date(curr.date+" "+curr.time);
+  let diff=new Date(next.date+"T"+next.time)-new Date(curr.date+"T"+curr.time);
 
-  if(!days[curr.date]) days[curr.date]={drive:0,work:0,rest:0};
+  if(!days[curr.date]) days[curr.date]={drive:0,work:0,rest:0,other:0};
 
   let t=curr.text.toLowerCase();
 
-  if(t.includes("jazda")){days[curr.date].drive+=diff;days[curr.date].work+=diff;}
-  else if(t.includes("praca")) days[curr.date].work+=diff;
-  else if(t.includes("przerwa")) days[curr.date].rest+=diff;
+  if(t.includes("jazda")){
+    days[curr.date].drive+=diff;
+    days[curr.date].work+=diff;
+  }
+  else if(t.includes("praca")){
+    days[curr.date].other+=diff;
+    days[curr.date].work+=diff;
+  }
+  else if(t.includes("przerwa")){
+    days[curr.date].rest+=diff;
+    days[curr.date].work+=diff;
+  }
  }
 
- let html=`<div class="ticket"><div class="center">RAPORT</div><div class="line"></div>`;
+ let html=`<div class="ticket"><div class="center">RAPORT MZA</div><div class="line"></div>`;
 
  Object.keys(days).forEach(d=>{
   html+=`${d}<br>
   JAZDA:${f(days[d].drive)}<br>
-  PRACA:${f(days[d].work)}<br>
+  INNA:${f(days[d].other)}<br>
   PRZERWY:${f(days[d].rest)}<br>
+  PRACA:${f(days[d].work)}<br>
   <div class="line"></div>`;
  });
 
- html+=`END`;
+ html+=`*** END ***`;
 
  printArea.innerHTML=html;
  printArea.style.display="block";
@@ -320,6 +348,8 @@ function weeklyReport(){
 function render(){
  work.innerText=f(state.declaredWork)+" / "+f(state.work);
  drive.innerText=f(state.declaredDrive)+" / "+f(state.drive);
+ other.innerText=f(state.other);
+
  mode.innerText="TRYB: "+state.mode;
 
  let req=requiredBreak();
