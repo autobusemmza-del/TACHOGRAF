@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v2</title>
+<title>TACHOGRAF MZA PRO v3</title>
 
 <style>
 body{
@@ -23,7 +23,7 @@ body{
 }
 
 .time{
-  font-size:22px;
+  font-size:20px;
   text-align:center;
 }
 
@@ -37,14 +37,14 @@ body{
 .red{color:red;}
 .green{color:#00ff88;}
 
-.buttons button{
+button{
   width:100%;
   margin:5px 0;
   padding:12px;
-  font-size:16px;
   background:#111;
   color:#00ff88;
   border:none;
+  font-size:16px;
 }
 
 /* LOGI */
@@ -53,25 +53,25 @@ body{
   max-height:200px;
   overflow:auto;
   background:#000;
-  padding:5px;
   border:1px solid #333;
 }
 
 .log-item{
-  padding:5px;
+  padding:6px;
   border-bottom:1px solid #222;
   cursor:pointer;
 }
 
-/* MODAL */
+/* MODALE */
 .modal{
   position:fixed;
-  width:100%;
-  height:100%;
-  background:rgba(0,0,0,0.9);
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.95);
   display:none;
   justify-content:center;
   align-items:center;
+  z-index:9999;
 }
 
 .box{
@@ -85,32 +85,36 @@ body{
   width:100%;
   padding:10px;
   margin:5px 0;
+  font-size:16px;
 }
 
 .box button{
   width:100%;
-  padding:10px;
   margin-top:5px;
 }
 
 /* WYDRUK */
+@media print {
+  body * { display:none; }
+  #printArea, #printArea * { display:block; }
+}
+
 .print{
   display:none;
   background:white;
   color:black;
   font-family:monospace;
-  padding:20px;
+  padding:10px;
 }
 
 .ticket{
-  width:100%;
+  width:260px;
+  margin:auto;
   font-size:12px;
 }
 
-.line{
-  border-bottom:1px dashed #000;
-  margin:5px 0;
-}
+.center{text-align:center;}
+.line{border-top:1px dashed black; margin:5px 0;}
 </style>
 </head>
 
@@ -129,20 +133,18 @@ body{
 
 <button onclick="openCard()">WŁÓŻ KARTĘ</button>
 
-<div class="buttons">
 <button onclick="setMode('jazda')">JAZDA</button>
 <button onclick="setMode('praca')">INNA PRACA</button>
 <button onclick="setMode('przerwa')">PRZERWA</button>
 <button onclick="endDay()">KONIEC PRACY</button>
 <button onclick="printLogs()">WYDRUK</button>
 <button onclick="resetAll()">RESET</button>
-</div>
 
 <div class="logs" id="logs"></div>
 
 </div>
 
-<!-- PANEL KARTY -->
+<!-- MODAL KARTA -->
 <div class="modal" id="cardModal">
 <div class="box">
 <h3>KARTA KIEROWCY</h3>
@@ -153,7 +155,7 @@ body{
 </div>
 </div>
 
-<!-- EDYCJA LOG -->
+<!-- MODAL EDYCJI -->
 <div class="modal" id="editModal">
 <div class="box">
 <input id="editText">
@@ -163,7 +165,7 @@ body{
 </div>
 </div>
 
-<div class="print" id="printArea"></div>
+<div id="printArea" class="print"></div>
 
 <script>
 let state = JSON.parse(localStorage.getItem("tacho")) || {
@@ -245,9 +247,14 @@ function setMode(m){
   addLog("TRYB: "+m);
 }
 
-/* PANEL KARTY */
-function openCard(){document.getElementById("cardModal").style.display="flex";}
-function closeCard(){document.getElementById("cardModal").style.display="none";}
+/* KARTA */
+function openCard(){
+  document.getElementById("cardModal").style.display="flex";
+}
+
+function closeCard(){
+  document.getElementById("cardModal").style.display="none";
+}
 
 function insertCard(){
   let w=document.getElementById("cardWork").value;
@@ -256,7 +263,10 @@ function insertCard(){
   let [h1,m1]=w.split(":").map(Number);
   let [h2,m2]=d.split(":").map(Number);
 
-  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)) return alert("Błąd danych");
+  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)){
+    alert("Błędny format");
+    return;
+  }
 
   state.work=((h1*60)+m1)*60000;
   state.drive=((h2*60)+m2)*60000;
@@ -286,7 +296,9 @@ function deleteLog(){
   closeEdit(); save();
 }
 
-function closeEdit(){document.getElementById("editModal").style.display="none";}
+function closeEdit(){
+  document.getElementById("editModal").style.display="none";
+}
 
 /* KONIEC */
 function endDay(){
@@ -295,29 +307,34 @@ function endDay(){
   addLog("KONIEC "+h+" KM:"+km);
 }
 
-/* WYDRUK */
+/* WYDRUK REAL */
 function printLogs(){
   let html=`
   <div class="ticket">
-  ==== SIEMENS VDO ====<br>
+  <div class="center">*** SIEMENS VDO ***</div>
+  <div class="center">TACHOGRAF CYFROWY</div>
+  <div class="line"></div>
   DATA: ${new Date().toLocaleDateString()}<br>
-  ---------------------<br>
+  GODZ: ${new Date().toLocaleTimeString()}<br>
+  <div class="line"></div>
   PRACA: ${f(state.work)}<br>
   JAZDA: ${f(state.drive)}<br>
   PRZERWY: ${f(state.breakTime)}<br>
-  ---------------------<br>
-  LOGI:<br>
+  <div class="line"></div>
+  ZDARZENIA:<br>
   `;
 
-  state.logs.slice(0,40).forEach(l=>{
-    html+=`${l.time}<br>${l.text}<div class="line"></div>`;
+  state.logs.slice(0,40).reverse().forEach(l=>{
+    html+=`${l.time}<br>${l.text}<br>`;
   });
 
-  html+="</div>";
+  html+=`<div class="line"></div>
+  *** KONIEC WYDRUKU ***</div>`;
 
   let p=document.getElementById("printArea");
   p.innerHTML=html;
   p.style.display="block";
+
   window.print();
 }
 
