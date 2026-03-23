@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v3.3</title>
+<title>TACHOGRAF MZA PRO v3.4</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
@@ -108,8 +108,8 @@ button{
 <!-- EDYCJA LOG -->
 <div class="modal" id="editModal">
 <div class="box">
-<input id="editDate" placeholder="Data YYYY-MM-DD">
-<input id="editTime" placeholder="Godzina HH:mm">
+<input id="editDate" placeholder="YYYY-MM-DD">
+<input id="editTime" placeholder="HH:mm">
 <input id="editText">
 <button onclick="saveLog()">ZAPISZ</button>
 <button onclick="deleteLog()">USUŃ</button>
@@ -167,21 +167,19 @@ setInterval(()=>{
 
 /* RENDER */
 function render(){
-  document.getElementById("workDecl").innerText=f(state.work);
-  document.getElementById("driveDecl").innerText=f(state.drive);
-  document.getElementById("workReal").innerText=f(state.realWork);
-  document.getElementById("driveReal").innerText=f(state.realDrive);
+  workDecl.innerText=f(state.work);
+  driveDecl.innerText=f(state.drive);
+  workReal.innerText=f(state.realWork);
+  driveReal.innerText=f(state.realDrive);
+  mode.innerText="TRYB: "+state.mode;
 
-  document.getElementById("mode").innerText="TRYB: "+state.mode;
-
-  let logsEl=document.getElementById("logs");
-  logsEl.innerHTML="";
+  logs.innerHTML="";
   state.logs.forEach((l,i)=>{
     let div=document.createElement("div");
     div.className="log-item";
     div.innerText=l.date+" "+l.time+" | "+l.text;
     div.onclick=()=>editLog(i);
-    logsEl.appendChild(div);
+    logs.appendChild(div);
   });
 }
 
@@ -198,17 +196,17 @@ function addLog(t){
 function editLog(i){
   editIndex=i;
   let l=state.logs[i];
-  document.getElementById("editDate").value=l.date;
-  document.getElementById("editTime").value=l.time;
-  document.getElementById("editText").value=l.text;
-  document.getElementById("editModal").style.display="flex";
+  editDate.value=l.date;
+  editTime.value=l.time;
+  editText.value=l.text;
+  editModal.style.display="flex";
 }
 
 function saveLog(){
   let l=state.logs[editIndex];
-  l.date=document.getElementById("editDate").value;
-  l.time=document.getElementById("editTime").value;
-  l.text=document.getElementById("editText").value;
+  l.date=editDate.value;
+  l.time=editTime.value;
+  l.text=editText.value;
   closeEdit(); save();
 }
 
@@ -217,7 +215,7 @@ function deleteLog(){
   closeEdit(); save();
 }
 
-function closeEdit(){document.getElementById("editModal").style.display="none";}
+function closeEdit(){editModal.style.display="none";}
 
 /* TRYB */
 function setMode(m){
@@ -227,8 +225,8 @@ function setMode(m){
 }
 
 /* KARTA */
-function openCard(){document.getElementById("cardModal").style.display="flex";}
-function closeCard(){document.getElementById("cardModal").style.display="none";}
+function openCard(){cardModal.style.display="flex";}
+function closeCard(){cardModal.style.display="none";}
 
 function insertCard(){
   let name=cardName.value, surname=cardSurname.value, number=cardNumber.value;
@@ -242,7 +240,7 @@ function insertCard(){
   state.work=((h1*60)+m1)*60000;
   state.drive=((h2*60)+m2)*60000;
 
-  addLog("KARTA "+name+" "+surname);
+  addLog("KARTA WLOZONA");
   closeCard();
 }
 
@@ -254,20 +252,48 @@ function saveEnd(){
   closeEnd();
 }
 
-/* WYDRUK */
+/* WYDRUK 1:1 PRO */
 function printLogs(){
+
+  let sorted=[...state.logs].sort((a,b)=>{
+    return (a.date+" "+a.time).localeCompare(b.date+" "+b.time);
+  });
+
+  function formatTime(t){
+    let [h,m]=t.split(":");
+    return String(h).padStart(2,'0')+":"+String(m).padStart(2,'0');
+  }
+
+  function mapText(txt){
+    if(txt.includes("KARTA")) return "KARTA WLOZONA";
+    if(txt.includes("jazda")) return "JAZDA";
+    if(txt.includes("praca")) return "INNA PRACA";
+    if(txt.includes("przerwa")) return "PRZERWA";
+    if(txt.includes("KONIEC")) return txt;
+    return txt.toUpperCase();
+  }
+
   let html=`<div class="ticket">
   <div class="center">*** SIEMENS VDO ***</div>
   <div class="line"></div>
-  KIEROWCA:<br>${state.driver?.name||""} ${state.driver?.surname||""}<br>
+
+  KIEROWCA:<br>
+  ${state.driver?.name||""} ${state.driver?.surname||""}<br>
   NR: ${state.driver?.number||""}
+
   <div class="line"></div>`;
 
-  state.logs.slice().reverse().forEach(l=>{
-    html+=`${l.date} ${l.time}<br>${l.text}<div class="line"></div>`;
+  sorted.forEach(l=>{
+    html+=`${l.date} ${formatTime(l.time)}<br>${mapText(l.text)}<div class="line"></div>`;
   });
 
-  html+=`*** END ***</div>`;
+  html+=`
+  --- PODSUMOWANIE ---<br>
+  JAZDA: ${f(state.realDrive)}<br>
+  PRACA: ${f(state.realWork)}<br>
+  PRZERWY: ${f(state.breakTime)}<br>
+  <div class="line"></div>
+  *** END ***</div>`;
 
   printArea.innerHTML=html;
   printArea.style.display="block";
