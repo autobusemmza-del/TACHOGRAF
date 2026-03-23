@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v4.8 FINAL</title>
+<title>TACHOGRAF MZA PRO v5.1 FINAL</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
@@ -36,7 +36,6 @@ button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border
 
 <div>PRACA: <span id="work"></span></div>
 <div>JAZDA: <span id="drive"></span></div>
-
 </div>
 
 <button onclick="openCard()">WŁÓŻ KARTĘ</button>
@@ -45,6 +44,7 @@ button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border
 <button onclick="setMode('przerwa')">PRZERWA</button>
 <button onclick="openEndModal()">KONIEC PRACY</button>
 <button onclick="printLogs()">WYDRUK</button>
+<button onclick="weeklyReport()">RAPORT TYGODNIOWY</button>
 <button onclick="resetAll()">RESET</button>
 
 <div class="logs" id="logs"></div>
@@ -63,9 +63,7 @@ button{width:100%;margin:5px 0;padding:12px;background:#111;color:#00ff88;border
 
 <div class="modal" id="editModal">
 <div class="box">
-<input id="editDate">
-<input id="editTime">
-<input id="editText">
+<input id="editDate"><input id="editTime"><input id="editText">
 <button onclick="saveLog()">ZAPISZ</button>
 <button onclick="deleteLog()">USUŃ</button>
 <button onclick="closeEdit()">ANULUJ</button>
@@ -108,11 +106,14 @@ function f(ms){
  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 
-function valid(t){return /^\d{1,2}:\d{2}$/.test(t);}
-
-function parseDate(d,t){
- return new Date(d+"T"+t.padStart(8,"0"));
+// ===== PARSE (NAPRAWIONE) =====
+function parse(d,t){
+ let [y,m,day]=d.split("-");
+ let [h,min,s]=t.split(":");
+ return new Date(y, m-1, day, h, min, s||0);
 }
+
+function valid(t){return /^\d{1,2}:\d{2}$/.test(t);}
 
 // ===== TICK =====
 setInterval(()=>{
@@ -121,22 +122,16 @@ setInterval(()=>{
  let now=Date.now();
  let diff=now-state.last;
 
- if(state.mode==="jazda" || state.mode==="praca" || state.mode==="przerwa"){
-   state.work+=diff;
- }
-
+ if(["jazda","praca","przerwa"].includes(state.mode)) state.work+=diff;
  if(state.mode==="jazda") state.drive+=diff;
 
  if(state.mode==="przerwa"){
   state.breakCycle+=diff;
-
-  while(state.breakCycle>=15*60000){
-    state.breakTime+=15*60000;
-    state.breakCycle-=15*60000;
+  while(state.breakCycle>=900000){
+    state.breakTime+=900000;
+    state.breakCycle-=900000;
   }
- } else {
-  state.breakCycle=0;
- }
+ } else state.breakCycle=0;
 
  state.last=now;
  save(); render();
@@ -155,8 +150,8 @@ function addLog(t){
 
 // ===== TRYB =====
 function setMode(m){
- if(!state.driver){alert("Włóż kartę");return;}
- if(!state.active){alert("Zakończony dzień");return;}
+ if(!state.driver) return alert("Włóż kartę");
+ if(!state.active) return alert("Dzień zakończony");
  state.mode=m;
  addLog("TRYB: "+m);
 }
@@ -166,10 +161,7 @@ function openCard(){cardModal.style.display="flex";}
 function closeCard(){cardModal.style.display="none";}
 
 function insertCard(){
- if(!valid(cardWork.value)||!valid(cardDrive.value)){
-   alert("Format hh:mm");
-   return;
- }
+ if(!valid(cardWork.value)||!valid(cardDrive.value)) return alert("Format hh:mm");
 
  let [h1,m1]=cardWork.value.split(":").map(Number);
  let [h2,m2]=cardDrive.value.split(":").map(Number);
@@ -220,58 +212,82 @@ function openEndModal(){endModal.style.display="flex";}
 function closeEnd(){endModal.style.display="none";}
 
 function saveEnd(){
+ if(!valid(endHour.value)) return alert("hh:mm");
+
  addLog("KONIEC "+endHour.value+" KM:"+endKm.value);
  addLog("ODPOCZYNEK");
 
  state.mode="odpoczynek";
  state.active=false;
+ state.last=Date.now();
 
  closeEnd();
 }
 
 // ===== SORT =====
-function getSortedLogs(){
- return [...state.logs].sort((a,b)=>parseDate(a.date,a.time)-parseDate(b.date,b.time));
+function getSorted(){
+ return [...state.logs].sort((a,b)=>parse(a.date,a.time)-parse(b.date,b.time));
 }
 
 // ===== WYDRUK =====
 function printLogs(){
 
- let sorted=getSortedLogs();
-
+ let s=getSorted();
  let drive=0,work=0;
 
- for(let i=0;i<sorted.length-1;i++){
-  let diff=parseDate(sorted[i+1].date,sorted[i+1].time)-parseDate(sorted[i].date,sorted[i].time);
-  if(isNaN(diff)) continue;
+ for(let i=0;i<s.length-1;i++){
+  let d1=parse(s[i].date,s[i].time);
+  let d2=parse(s[i+1].date,s[i+1].time);
+  if(isNaN(d1)||isNaN(d2)) continue;
 
-  let t=sorted[i].text.toLowerCase();
+  let diff=Math.max(0,d2-d1);
+  let t=s[i].text.toLowerCase();
 
-  if(t.includes("jazda")){
-    drive+=diff;
-    work+=diff;
-  }
-  else if(t.includes("praca") || t.includes("przerwa")){
-    work+=diff;
-  }
+  if(t.includes("jazda")){drive+=diff;work+=diff;}
+  else if(t.includes("praca")||t.includes("przerwa")) work+=diff;
  }
 
- let html=`<div class="ticket">
- <div class="center">*** SIEMENS VDO ***</div>
- <div class="line"></div>
+ let html=`<div class="ticket"><div class="center">*** SIEMENS VDO ***</div><div class="line"></div>
+ KIEROWCA:<br>${state.driver?.name}<br>NR:${state.driver?.nr}<div class="line"></div>`;
 
- KIEROWCA:<br>${state.driver?.name}<br>
- NR: ${state.driver?.nr}
- <div class="line"></div>`;
+ s.forEach(l=>{html+=`${l.date} ${l.time}<br>${l.text}<div class="line"></div>`;});
 
- sorted.forEach(l=>{
-  html+=`${l.date} ${l.time}<br>${l.text}<div class="line"></div>`;
+ html+=`--- PODSUMOWANIE ---<br>JAZDA:${f(drive)}<br>PRACA:${f(work)}<div class="line"></div>*** END ***`;
+
+ printArea.innerHTML=html;
+ printArea.style.display="block";
+ window.print();
+}
+
+// ===== RAPORT =====
+function weeklyReport(){
+
+ let s=getSorted();
+ let days={};
+
+ for(let i=0;i<s.length-1;i++){
+  let d1=parse(s[i].date,s[i].time);
+  let d2=parse(s[i+1].date,s[i+1].time);
+  if(isNaN(d1)||isNaN(d2)) continue;
+
+  let diff=Math.max(0,d2-d1);
+  let day=s[i].date;
+
+  if(!days[day]) days[day]={drive:0,work:0};
+
+  let t=s[i].text.toLowerCase();
+
+  if(t.includes("jazda")){days[day].drive+=diff;days[day].work+=diff;}
+  else if(t.includes("praca")||t.includes("przerwa")) days[day].work+=diff;
+ }
+
+ let html=`<div class="ticket"><div class="center">RAPORT</div><div class="line"></div>`;
+
+ Object.keys(days).forEach(d=>{
+  html+=`${d}<br>JAZDA:${f(days[d].drive)}<br>PRACA:${f(days[d].work)}<div class="line"></div>`;
  });
 
- html+=`--- PODSUMOWANIE ---<br>
- JAZDA: ${f(drive)}<br>
- PRACA: ${f(work)}<br>
- <div class="line"></div>*** END ***`;
+ html+=`*** END ***`;
 
  printArea.innerHTML=html;
  printArea.style.display="block";
@@ -280,29 +296,25 @@ function printLogs(){
 
 // ===== RENDER =====
 function render(){
-
  work.innerText=f(state.declaredWork)+" / "+f(state.work);
  drive.innerText=f(state.declaredDrive)+" / "+f(state.drive);
-
  mode.innerText="TRYB: "+state.mode;
 
- // PRZERWY STATUS
  let req=0;
  let d=state.drive/3600000;
-
- if(d>8) req=45*60000;
- else if(d>=6) req=30*60000;
- else if(state.work>6*3600000) req=15*60000;
+ if(d>8) req=2700000;
+ else if(d>=6) req=1800000;
+ else if(state.work>21600000) req=900000;
 
  breakStatus.innerText=`PRZERWY: ${f(state.breakTime)} / ${f(req)}`;
  breakStatus.className="status "+(state.breakTime>=req?"green":"red");
 
  logs.innerHTML="";
- getSortedLogs().forEach((l,i)=>{
+ getSorted().forEach((l)=>{
   let div=document.createElement("div");
   div.className="log-item";
   div.innerText=l.date+" "+l.time+" | "+l.text;
-  div.onclick=()=>editLog(i);
+  div.onclick=()=>editLog(state.logs.indexOf(l));
   logs.appendChild(div);
  });
 }
