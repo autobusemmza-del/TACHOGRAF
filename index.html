@@ -3,16 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TACHOGRAF MZA PRO v3.2</title>
+<title>TACHOGRAF MZA PRO v3.3</title>
 
 <style>
 body{margin:0;background:#0a0a0a;color:#00ff88;font-family:monospace;}
 .container{padding:10px;}
 
 .display{
-  background:#000;
-  border-radius:15px;
-  padding:15px;
+  background:#000;border-radius:15px;padding:15px;
   box-shadow:0 0 25px #00ff88;
 }
 
@@ -25,11 +23,10 @@ button{
   background:#111;color:#00ff88;border:none;
 }
 
-/* LOGI */
 .logs{margin-top:10px;max-height:200px;overflow:auto;background:#000;border:1px solid #333;}
 .log-item{padding:6px;border-bottom:1px solid #222;cursor:pointer;}
 
-/* MODAL */
+/* MODALE */
 .modal{
   position:fixed;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.95);
@@ -41,9 +38,25 @@ button{
   background:#111;padding:20px;border:2px solid #00ff88;width:85%;
 }
 
-.box input{
-  width:100%;padding:10px;margin:5px 0;font-size:16px;
+.box input{width:100%;padding:10px;margin:5px 0;font-size:16px;}
+
+/* WYDRUK */
+@media print {
+  body * { display:none; }
+  #printArea, #printArea * { display:block; }
 }
+
+.print{
+  display:none;background:white;color:black;
+  font-family:monospace;padding:10px;
+}
+
+.ticket{
+  width:260px;margin:auto;font-size:12px;
+}
+
+.center{text-align:center;}
+.line{border-top:1px dashed black;margin:5px 0;}
 </style>
 </head>
 
@@ -71,6 +84,7 @@ button{
 <button onclick="setMode('praca')">INNA PRACA</button>
 <button onclick="setMode('przerwa')">PRZERWA</button>
 <button onclick="openEndModal()">KONIEC PRACY</button>
+<button onclick="printLogs()">WYDRUK</button>
 <button onclick="resetAll()">RESET</button>
 
 <div class="logs" id="logs"></div>
@@ -94,6 +108,8 @@ button{
 <!-- EDYCJA LOG -->
 <div class="modal" id="editModal">
 <div class="box">
+<input id="editDate" placeholder="Data YYYY-MM-DD">
+<input id="editTime" placeholder="Godzina HH:mm">
 <input id="editText">
 <button onclick="saveLog()">ZAPISZ</button>
 <button onclick="deleteLog()">USUŃ</button>
@@ -112,26 +128,20 @@ button{
 </div>
 </div>
 
+<div id="printArea" class="print"></div>
+
 <script>
 let state = JSON.parse(localStorage.getItem("tacho")) || {
-  work:0,
-  drive:0,
-  realWork:0,
-  realDrive:0,
-  breakTime:0,
-  mode:"---",
-  last:Date.now(),
-  logs:[],
-  driver:null
+  work:0, drive:0, realWork:0, realDrive:0,
+  breakTime:0, mode:"---", last:Date.now(),
+  logs:[], driver:null
 };
 
 let editIndex=null;
 
 /* TIME */
 setInterval(()=>{
-  let d=new Date();
-  document.getElementById("time").innerText =
-    d.toLocaleString("pl-PL");
+  document.getElementById("time").innerText=new Date().toLocaleString("pl-PL");
 },1000);
 
 /* FORMAT */
@@ -152,8 +162,7 @@ setInterval(()=>{
   if(state.mode==="przerwa") state.breakTime+=diff;
 
   state.last=now;
-  save();
-  render();
+  save(); render();
 },1000);
 
 /* RENDER */
@@ -170,11 +179,45 @@ function render(){
   state.logs.forEach((l,i)=>{
     let div=document.createElement("div");
     div.className="log-item";
-    div.innerText=l.time+" | "+l.text;
+    div.innerText=l.date+" "+l.time+" | "+l.text;
     div.onclick=()=>editLog(i);
     logsEl.appendChild(div);
   });
 }
+
+/* LOGI */
+function addLog(t){
+  let d=new Date();
+  state.logs.unshift({
+    date:d.toISOString().slice(0,10),
+    time:d.toTimeString().slice(0,5),
+    text:t
+  });
+}
+
+function editLog(i){
+  editIndex=i;
+  let l=state.logs[i];
+  document.getElementById("editDate").value=l.date;
+  document.getElementById("editTime").value=l.time;
+  document.getElementById("editText").value=l.text;
+  document.getElementById("editModal").style.display="flex";
+}
+
+function saveLog(){
+  let l=state.logs[editIndex];
+  l.date=document.getElementById("editDate").value;
+  l.time=document.getElementById("editTime").value;
+  l.text=document.getElementById("editText").value;
+  closeEdit(); save();
+}
+
+function deleteLog(){
+  state.logs.splice(editIndex,1);
+  closeEdit(); save();
+}
+
+function closeEdit(){document.getElementById("editModal").style.display="none";}
 
 /* TRYB */
 function setMode(m){
@@ -188,75 +231,52 @@ function openCard(){document.getElementById("cardModal").style.display="flex";}
 function closeCard(){document.getElementById("cardModal").style.display="none";}
 
 function insertCard(){
-  let name=document.getElementById("cardName").value;
-  let surname=document.getElementById("cardSurname").value;
-  let number=document.getElementById("cardNumber").value;
+  let name=cardName.value, surname=cardSurname.value, number=cardNumber.value;
+  let [h1,m1]=cardWork.value.split(":").map(Number);
+  let [h2,m2]=cardDrive.value.split(":").map(Number);
 
-  let [h1,m1]=document.getElementById("cardWork").value.split(":").map(Number);
-  let [h2,m2]=document.getElementById("cardDrive").value.split(":").map(Number);
-
-  if(!name||!surname||!number){alert("Dane!");return;}
-  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)){alert("Czas!");return;}
+  if(!name||!surname||!number) return alert("Dane!");
+  if(isNaN(h1)||isNaN(m1)||isNaN(h2)||isNaN(m2)) return alert("Czas!");
 
   state.driver={name,surname,number};
   state.work=((h1*60)+m1)*60000;
   state.drive=((h2*60)+m2)*60000;
 
-  addLog("KARTA: "+name+" "+surname);
+  addLog("KARTA "+name+" "+surname);
   closeCard();
 }
 
-/* LOGI */
-function addLog(t){
-  state.logs.unshift({time:new Date().toLocaleString(), text:t});
-}
-
-function editLog(i){
-  editIndex=i;
-  document.getElementById("editText").value=state.logs[i].text;
-  document.getElementById("editModal").style.display="flex";
-}
-
-function saveLog(){
-  state.logs[editIndex].text=document.getElementById("editText").value;
-  closeEdit(); save();
-}
-
-function deleteLog(){
-  state.logs.splice(editIndex,1);
-  closeEdit(); save();
-}
-
-function closeEdit(){
-  document.getElementById("editModal").style.display="none";
-}
-
 /* KONIEC */
-function openEndModal(){
-  document.getElementById("endModal").style.display="flex";
-}
-
-function closeEnd(){
-  document.getElementById("endModal").style.display="none";
-}
-
+function openEndModal(){endModal.style.display="flex";}
+function closeEnd(){endModal.style.display="none";}
 function saveEnd(){
-  let h=document.getElementById("endHour").value;
-  let km=document.getElementById("endKm").value;
-  addLog("KONIEC "+h+" KM:"+km);
+  addLog("KONIEC "+endHour.value+" KM:"+endKm.value);
   closeEnd();
 }
 
-/* RESET */
-function resetAll(){
-  localStorage.removeItem("tacho");
-  location.reload();
+/* WYDRUK */
+function printLogs(){
+  let html=`<div class="ticket">
+  <div class="center">*** SIEMENS VDO ***</div>
+  <div class="line"></div>
+  KIEROWCA:<br>${state.driver?.name||""} ${state.driver?.surname||""}<br>
+  NR: ${state.driver?.number||""}
+  <div class="line"></div>`;
+
+  state.logs.slice().reverse().forEach(l=>{
+    html+=`${l.date} ${l.time}<br>${l.text}<div class="line"></div>`;
+  });
+
+  html+=`*** END ***</div>`;
+
+  printArea.innerHTML=html;
+  printArea.style.display="block";
+  window.print();
 }
 
-/* SAVE */
-function save(){
-  localStorage.setItem("tacho", JSON.stringify(state));
-}
+/* RESET */
+function resetAll(){localStorage.removeItem("tacho");location.reload();}
+function save(){localStorage.setItem("tacho", JSON.stringify(state));}
 
 render();
 </script>
